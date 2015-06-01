@@ -8,4 +8,4 @@ Your data analysis must address the following questions:
 
 1. Across the United States, which types of events (as indicated in the EVTYPE variable) are most harmful with respect to population health? **Output**: ![populationharm.png](https://github.com/shngli/Data-Analysis-R/blob/master/NOAA%20storm%20disasters%20analysis/populationharm.png)
 2. Across the United States, which types of events have the greatest economic consequences? **Output**: ![economiccost.png](https://github.com/shngli/Data-Analysis-R/blob/master/NOAA%20storm%20disasters%20analysis/economiccost.png)
-3/ Across the United States, which 10 states suffered the most population damage? **Output**: ![statedamage.png](https://github.com/shngli/Data-Analysis-R/blob/master/NOAA%20storm%20disasters%20analysis/statedamage.png)
+3. Across the United States, which 10 states suffered the most population damage? **Output**: ![statedamage.png](https://github.com/shngli/Data-Analysis-R/blob/master/NOAA%20storm%20disasters%20analysis/statedamage.png)
