@@ -10,7 +10,7 @@ Your data analysis submission will consist of the following components:
 2. One figure for your data analysis uploaded as a .png, .jpg, or .pdf file, along with a figure caption of up to 500 words. 
 
 **Output**: 
-- Interest rate (%) by loan length (36 months vs 60 months) ![InterestRateLoanLength.png](https://github.com/shngli/R-data-analysis/blob/master/Lending%20club%20interest%20rate%20analysis/InterestRateLoanLength.png) 
-- Interest rate (%) vs FICO Score (colored by loan lengths, 36 months and 60 months) ![InterestRateFICOScore.png](https://github.com/shngli/R-data-analysis/blob/master/Lending%20club%20interest%20rate%20analysis/InterestRateFICOScore.png) 
-- Interest rate (%) vs Amount funded by investors (colored by FICO score) ![InterestRateAmntFunded.png](https://github.com/shngli/R-data-analysis/blob/master/Lending%20club%20interest%20rate%20analysis/InterestRateAmntFunded.png)
-- Residual plot of the final multivariate model ![residualsmodel4.png](https://github.com/shngli/R-data-analysis/blob/master/Lending%20club%20interest%20rate%20analysis/residualsmodel4.png)
+- Interest rate (%) by loan length (36 months vs 60 months) ![InterestRateLoanLength.png](https://github.com/shngli/Data-Analysis-R/blob/master/Lending%20club%20interest%20rate%20analysis/InterestRateLoanLength.png) 
+- Interest rate (%) vs FICO Score (colored by loan lengths, 36 months and 60 months) ![InterestRateFICOScore.png](https://github.com/shngli/Data-Analysis-R/blob/master/Lending%20club%20interest%20rate%20analysis/InterestRateFICOScore.png) 
+- Interest rate (%) vs Amount funded by investors (colored by FICO score) ![InterestRateAmntFunded.png](https://github.com/shngli/Data-Analysis-R/blob/master/Lending%20club%20interest%20rate%20analysis/InterestRateAmntFunded.png)
+- Residual plot of the final multivariate model ![residualsmodel4.png](https://github.com/shngli/Data-Analysis-R/blob/master/Lending%20club%20interest%20rate%20analysis/residualsmodel4.png)
