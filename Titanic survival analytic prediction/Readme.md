@@ -23,7 +23,7 @@ Description of the dataset variables:
 a) a 3-way table for "survived", "pclass" and "sex",
 
 b) 5-number-summaries and histogram or density or stem plots for "age" and "fare".
-![ageFare.png](https://github.com/shngli/R-data-analysis/blob/master/Titanic%20survival%20analytic%20prediction/ageFare.png)
+![ageFare.png](https://github.com/shngli/Data-Analysis-R/blob/master/Titanic%20survival%20analytic%20prediction/ageFare.png)
 
 c) frequency tables for "sibsp" and "embarked."
 
@@ -44,9 +44,9 @@ e) Summary your findings for logistic models. Report the AIC/BIC for model II(a)
 3) Divide the data into training and test. Explore various tree models with all the variables except Life_boat, name, ticket and cabin.
 
 a) Fit a tree model. Explain how you choose the tree size (or number of splits) -- the results may not be stable when using CV errors to select the optimal tree (i.e., the optimal "nsplit" changes when you re-run the code); you can run the code several times, and then pick the most frequent optimal "nsplit". Plot the tree. Comment on the tree, e.g., do you think some of the splits make sense? Summarize your prediction on the test data (using the seleceted tree) by a 2-by-2 table, and report your prediction accuracy.
-![treePlot.png](https://github.com/shngli/R-data-analysis/blob/master/Titanic%20survival%20analytic%20prediction/treePlot.png)
+![treePlot.png](https://github.com/shngli/Data-Analysis-R/blob/master/Titanic%20survival%20analytic%20prediction/treePlot.png)
 
 b) Fit a random forest. Summarize your prediction on the test data by a 2-by-2 table, and report your prediction accuracy. 
-![forestPlot.png](https://github.com/shngli/R-data-analysis/blob/master/Titanic%20survival%20analytic%20prediction/forestPlot.png)
+![forestPlot.png](https://github.com/shngli/Data-Analysis-R/blob/master/Titanic%20survival%20analytic%20prediction/forestPlot.png)
 
 c) In terms of prediction accuracy, which one does better, the single tree or the forest?
