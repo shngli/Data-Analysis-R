@@ -1,0 +1,133 @@
+Daily Activity Monitoring
+========================================================
+Author: Sheng Li
+
+## 1) Loading and preprocessing the data
+```{r}
+activity <- read.csv("activity.csv", header = TRUE)
+
+activity$date <- as.Date(as.character(activity$date))
+
+summary(activity)
+```
+
+## 2) What is mean total number of steps taken per day?
+
+This analysis first examines the mean total number of steps taken per day if the missing values are included. As seen from the histogram, the mean (red line) is lower than the median (dashed blue line) because of the number of days where 0 step is recorded by the activity monitoring device.
+
+```{r}
+library(plyr)
+library(ggplot2)
+
+stepsPerDayNA <- ddply(activity, "date", summarise, totalSteps = sum(steps, na.rm=T))
+
+cuts1 <- data.frame(Thresholds="Mean", vals = mean(stepsPerDayNA$totalSteps))
+cuts2 <- data.frame(Thresholds="Median", vals = median(stepsPerDayNA$totalSteps))
+cuts <- rbind(cuts1,cuts2)
+
+ggplot(data = stepsPerDayNA, aes(x = stepsPerDayNA$totalSteps)) + geom_histogram() + 
+    geom_vline(data=cuts, aes(xintercept=vals, linetype=Thresholds, colour = Thresholds), show_guide = TRUE) + 
+    xlab("Total number of steps") + ggtitle("Total Number of Steps Taken Per Day (include missing values)")
+```
+
+The calculation shows that the mean total number of steps taken per day is 9354 steps, whereas the median total number of steps taken per day is 10395 steps.
+```{r}
+mean(stepsPerDayNA$totalSteps)
+median(stepsPerDayNA$totalSteps)
+```
+
+Alternatively, I consider the case if the analysis ignores the missing values in the dataset. The histogram shows that the mean and the median total number of steps taken per day cannot be distinguished by the plot because the red line and the dashed blue line are aligned together.
+```{r}
+stepsPerDay <- ddply(activity, "date", summarise, totalSteps = sum(steps))
+
+cuts1 <- data.frame(Thresholds="Mean", vals = mean(stepsPerDay$totalSteps, na.rm=T))
+cuts2 <- data.frame(Thresholds="Median", vals = median(stepsPerDay$totalSteps, na.rm=T))
+cuts <- rbind(cuts1,cuts2)
+
+ggplot(data = stepsPerDay, aes(x = stepsPerDay$totalSteps)) + geom_histogram() + 
+    geom_vline(data=cuts, aes(xintercept=vals, linetype=Thresholds, colour = Thresholds), show_guide = TRUE) + 
+    xlab("Total number of steps") + ggtitle("Total Number of Steps Taken Per Day (exclude missing values)")
+```
+
+The calculation reveals that the mean total number of steps taken per day is 10766 steps, whereas the median total number of steps taken per day is 10765 steps.
+```{r}
+mean(stepsPerDay$totalSteps, na.rm=T)
+median(stepsPerDay$totalSteps, na.rm=T)
+```
+
+## 3) What is the average daily activity pattern?
+
+First, I construct a time series plot of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis).
+```{r}
+intervalavg <- ddply(activity, "interval", summarise, avgSteps = mean(steps, na.rm=T))
+
+summary(intervalavg)
+
+ggplot(data=intervalavg, aes(x=intervalavg$interval, y=intervalavg$avgSteps)) + geom_line() + 
+    ggtitle("Average Daily Activity Pattern Per 5-min Interval") + xlab("Interval (24-hours)") + 
+    ylab("Average Number of Steps Taken")
+```
+
+The 5-minute interval, on average across all the days in the dataset, that contains the maximum number of steps is at interval 835. 
+```{r}
+intervalavg[which.max(intervalavg$avgSteps),]
+```
+
+## 4) Imputing missing values
+
+First, I  report that there are 2304 missing values in the dataset (i.e. the total number of rows with NAs).
+```{r}
+table((is.na(activity$steps)))
+```
+
+I then fill in all of the missing values in the dataset, and create a new dataset that is equal to the original dataset but with the missing data filled in. In this case, I filled all missing values with the average value for that specific 5-minutes interval.
+```{r}
+averages <- aggregate(x=list(steps=activity$steps), by=list(interval=activity$interval), mean, na.rm=TRUE)
+
+fill_value <- function(steps, interval) {
+    filled <- NA
+    if (!is.na(steps))
+        filled <- c(steps)
+    else
+        filled <- (averages[intervalavg$interval==interval, "steps"])
+    return(filled)
+}
+activityFilled <- activity
+activityFilled$steps <- mapply(fill_value, activityFilled$steps, activityFilled$interval)
+```
+
+Next, I make a histogram of the total number of steps taken each day. Again, the plot shows that the mean and the median total number of steps taken per day cannot be distinguished since the red line and the dashed blue line are aligned together.
+```{r}
+stepsPerDayFilled <- ddply(activityFilled, "date", summarise, totalSteps = sum(steps))
+
+cuts1 <- data.frame(Thresholds="Mean", vals = mean(stepsPerDayFilled$totalSteps))
+cuts2 <- data.frame(Thresholds="Median", vals = median(stepsPerDayFilled$totalSteps))
+cuts <- rbind(cuts1,cuts2)
+
+ggplot(data = stepsPerDayFilled, aes(x = stepsPerDayFilled$totalSteps)) + geom_histogram() + 
+    geom_vline(data=cuts, aes(xintercept=vals, linetype=Thresholds, colour = Thresholds), show_guide = TRUE) + 
+    xlab("Total number of steps") + ggtitle("Total Number of Steps Taken Per Day (missing values filled)")
+```
+
+After filling in the missing values, the calculation reveals that the mean and median total number of steps taken per day is 10766 steps.
+```{r}
+mean(stepsPerDayFilled$totalSteps)
+median(stepsPerDayFilled$totalSteps)
+```
+
+## 5) Are there differences in activity patterns between weekdays and weekends?
+
+First, I create a new factor variable in the dataset with two levels, "weekday" and "weekend," to indicate whether a given date is a weekday or weekend day.
+```{r}
+dayofWeek <- ifelse(weekdays(activityFilled$date)=="Saturday" | weekdays(activityFilled$date)=="Sunday","weekend","weekday")
+activityFilled$day <- as.factor(dayofWeek)
+
+dayActivity <- ddply(activityFilled, c("interval","day"), summarise, avgSteps=mean(steps))
+```
+
+Next, I construct a panel plot containing a time series plot of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days orweekend days (y-axis). According to the time series plot, the user was more active on the weekdays during the morning between the interval 800 and 1000 than on the weekends. The plot also indicates that the user was typically an early-riser since the activity usually began after the time interval 500. However, perhaps because the user had to work, the activity level was higher on the weekends in the time interval after 1000.
+```{r}
+ggplot(dayActivity, aes(interval, avgSteps)) + geom_line(aes(colour=day)) + facet_grid(day ~ .) + 
+    ggtitle("Average Daily Activity Per 5-Min Interval (Weekday vs Weekend)") + xlab("interval (24-hours)") + 
+    ylab("Average Number of Steps Taken")
+```
