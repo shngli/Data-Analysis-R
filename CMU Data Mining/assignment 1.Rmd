@@ -1,0 +1,214 @@
+---
+title: "Solution 1"
+output: html_document
+---
+
+**Problem 1**
+Load "tmnt.Rdata", now you have a document-term matrix `dtm` loaded into memory, of dimension 8 documents `x` 6820 words. These are the 8 wikipedia documents that were used in lecture 2—4 of them on the teenage mutant ninja turtles and 4 of them on the artists of the same name. 
+
+**Q1a.** First normalize the documents by their total word count, and then apply IDF weighting to the words. Save this matrix as `dtm1`. Now reverse the order: first apply IDF weighting to the words, then normalize the documents by their total word count, and save this matrix as `dtm2`. Are `dtm1` and `dtm2` different?
+
+**Ans:**
+We compute dtm1 by normalizing each row first and then scaling each column by adding IDF weights. We compute dtm2 by scaling each column by adding IDF weights first and then normalizing each row, e.g.
+\[dtm1_{ij} = log(8/nw_j) \times dtm_{ij}/\sum_{j}dtm_{ij}\]
+\[dtm2_{ij} = log(8/nw_j) \times dtm_{ij}/\sum_{j}[log(8/nw_j) \times dtm_{ij}]\]
+
+```{r}
+load("/Users/shengli/Desktop/tmnt.Rdata")
+
+s <- (dtm==0)
+s <- t(matrix(as.numeric(s), ncol=8, byrow=T))
+nw <- colSums(s)
+IDF <- log(8/nw)
+dtm1 <- dtm/rowSums(dtm)
+dtm1 <- scale(dtm1,center = F,scale=IDF) # log(8/nw) * dtm1
+dtm2 <- scale(dtm,center=F,scale=IDF) # log(8/nw) * dtm
+dtm2 <- dtm2/rowSums(dtm2)
+norm(dtm1-dtm2,"M")
+```
+
+The L1 distance between dtm1 and dtm2 is 0.025, which suggests the two matrices are different.
+
+**Q1b.** We’re going to forgo IDF weighting with such a small collection (8 documents). Normalize the documents by their total word count, and call this matrix `dtm3`. According to this document-term matrix, which document is closest (measured in Euclidean distance) to the document named “tmnt mike”?
+
+**Ans:**
+Now only consider nomalizing the document, the Euclidean distance between the two documents are shown below. "tmnt raph" is the closest to "tmnt mike" with distance 0.0378.
+```{r}
+dtm3 <- dtm/rowSums(dtm)
+d <- dist(dtm3)
+d
+```
+
+**Q1c.** Sticking with the normalized matrix `dtm3`, compute the distance between each pair of documents using the function `dist()`. Now run hierarchical agglomerative clustering, both with single linkage and complete linkage, using the function `hclust()`. Plot the resulting dendograms for both linkages. If you had to split the documents into 2 groups, which linkage do you think gives a more reasonable clustering?
+
+**Ans:**
+If K=2, hierarchical agglomerative clustering with complete linkage gives a more reasonable clustering as it splits up the artists and the TMNT characters.
+```{r}
+par(mfrow=c(1,2))
+plot(hclust(d,method="single"),xlab="single")
+plot(hclust(d,method="complete"),xlab="complete")
+```
+
+**Q1d.** Combine the word counts from all of the documents into one cumulative word count vector i.e. for each word, you should now have a count for the number of times it appears across all 8 documents. List the top 20 most common words, and how many times they appear. What percentage of total occurrences do these top 20 words represent? How many of the top words account for 50% of total occurrences?
+
+**Ans:**
+The top 20 words represent 24% of the total occurence. 254 of the top words account for 50% of total occurence.
+```{r}
+wc <- as.numeric(colSums(dtm))
+names(wc) <- colnames(dtm)
+swc <- sort(wc,decreasing=TRUE)
+swc[1:20]
+```
+
+```{r}
+min(which(cumsum(swc)/sum(swc)>=0.5))
+```
+
+**Q1e.** Zipf’s law states that, given a collection of documents like the one we have, the number times a word appears is inversely proportional to its rank (the words being ranked by how common they are). In other words, the second most common word appears half as often as the most common word, the third most common word appears a third as often as the most common word, etc. Does our collection of 8 wikipedia articles appear to follow Zipf’s law? Can you give a plot to provide visual evidence for or against this claim? (Hint: for your plot, think about translating the relationship expressed by Zipf’s law into a mathematical one, between the number of occurrences y and the rank x of a word. Now take logs.)
+
+**Ans:**
+The collection of 8 articles appears to follow Zipf’s Law.
+```{r}
+plot(1:length(swc),swc,log="xy", xlab="Rank in the log scale", ylab="WordCount in the log scale")
+```
+
+**Problem 2**
+Compute the PageRank vector for the following graph, with d = 0.85. Repeat the calculation for d = 1 (BrokenRank). What’s the difference? Explain. Hint:use the `eigen()` function in R.
+```{r}
+require(igraph)
+net=data.frame(origin=c("1","2","2","3","3","4","5","5","6","7","7","7","8","9","10"), 
+               end=c("10","3","6","4","10","9","4","10","4","5","8","10","4","8","4"))
+par(family="serif", cex=0.5, ps=25, bg="white", col.lab="black", col.axis="black")
+plot(graph.edgelist(as.matrix(net)), edge.arrow.size=1, vertex.color="gray90", edge.color="black")
+```
+
+**Ans:**
+BrokenRank gives the same weight to page 4 and 9, twice the weight to page 8 while it gives 0 weight to the other pages. However, PageRank gives at least (1-d)/n = 0.015 to each page.
+```{r}
+L <- matrix(0,10,10)
+L[4,3] = 1
+L[3,2] = 1
+L[6,2] = 1
+L[4,6] = 1
+L[4,10] = 1
+L[4,5] = 1
+L[10,3] = 1
+L[10,1] = 1
+L[9,4] = 1
+L[4,8] = 1
+L[5,7] = 1
+L[10,7] = 1
+L[10,5] = 1
+L[8,7] = 1
+L[8,9] = 1
+
+Mi <- diag(1/colSums(L))
+```
+
+```{r}
+# BrokenRank
+A1 <- L%*%Mi
+e1 <- eigen(A1)
+v1 <- as.double(e1$vectors[,1])
+r1 <- v1/sum(v1)
+r1
+```
+
+```{r}
+# PageRank
+n <- nrow(L)
+d <- 0.85
+A2 <- matrix(1,10,10)*(1-d)/n + d*L%*%Mi
+e2 <- eigen(A2)
+v2 <- as.double(e2$vectors[,1])
+r2 <- v2/sum(v2)
+r2
+```
+
+**Problem 4**
+In this problem you’re going to investigate the invariance of agglomerative clustering using either single or complete linkage under a monotone transformation of the distances. Load "clust.Rdata" and you will have 2 objects loaded into memory: 1) `x`, a 40 × 2 matrix containing 40 observations along its rows; 2) `d`, the pairwise Euclidean distances. 
+
+**Q4a.** Run hierarchical agglomerative clustering with single linkage, using the function `hclust()`. Cut the tree at K = 4 clusters using the function `cutree()`, which returns a vector of cluster assignments. Plot the points in `x` with different colors (or different `pch` values) indicating the cluster assignments. Also plot the dendogram.
+
+**Ans:**
+See the code and the plots below.
+```{r, fig.height=7, fig.width=14}
+load("/Users/shengli/Desktop/clust.Rdata")
+
+method1 <- "single"
+k=4
+
+hc1 <- hclust(d,method=method1)
+cl1 <- cutree(hc1,k=k)
+par(mfrow=c(1,2))
+plot(x,col=cl1+1)
+plot(hc1)
+```
+
+**Q4b.** Repeat part (a) for complete linkage.
+
+**Ans:**
+Using the complete linkage gives different cluster assignments than that of single linkage.
+```{r, fig.height=7, fig.width=14}
+method2 <- "complete"
+hc2 <- hclust(d,method=method2)
+cl2 <- cutree(hc2,k=k)
+
+par(mfrow=c(1,2))
+plot(x,col=cl2+1)
+plot(hc2)
+```
+
+**Q4c.** Repeat parts (a) and (b), but passing `d^2` to the function `hclust()` instead of `d`. Did the clustering assignments change? Did the dendograms change?
+
+**Ans:**
+There is no change in clustering assignments and dendograms using both single linkage and complete linkage.
+```{r, fig.height=10, fig.width=10}
+hc3 <- hclust(d^2,method=method1)
+cl3 <- cutree(hc3,k=k)
+
+hc4 <- hclust(d^2,method=method2)
+cl4 <- cutree(hc4,k=k)
+
+par(mfrow=c(2,2))
+plot(x,col=cl3+1)
+plot(hc3)
+plot(x,col=cl4+1)
+plot(hc4)
+```
+
+**Q4e** Run agglomerative clustering with average linkage on each of `d` and `d^2`. Cut both trees at K = 4. Are the clustering assignments the same? How about for K = 3? 
+
+**Ans:**
+See the two figures below. It changed for K=3 but not for K=4 when using average linkage and $d^{2}$.
+```{r, fig.height=10, fig.width=10}
+method <- "average"
+k=3
+
+hc5 <- hclust(d,method=method)
+cl5 <- cutree(hc5,k=k)
+hc6 <- hclust(d^2,method=method)
+cl6 <- cutree(hc6,k=k)
+
+par(mfrow=c(2,2))
+plot(x,col=cl5+1)
+plot(hc5)
+plot(x,col=cl6+1)
+plot(hc6)
+```
+
+```{r, fig.height=10, fig.width=10}
+method <- "average"
+k=4
+
+hc7 <- hclust(d,method=method)
+cl7 <- cutree(hc7,k=k)
+hc8 <- hclust(d^2,method=method)
+cl8 <- cutree(hc8,k=k)
+
+par(mfrow=c(2,2))
+plot(x,col=cl7+1)
+plot(hc7)
+plot(x,col=cl8+1)
+plot(hc8)
+```

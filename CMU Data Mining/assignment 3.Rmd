@@ -1,0 +1,192 @@
+---
+title: "Solution 3"
+output: html_document
+---
+
+**Problem 1**
+
+Using R, create an example of 100 points in 2 dimensions that obey a 1-dimensional structure, i.e., the points lie along a smooth curve. Color the points by their intrinsic order along this curve, e.g., with colors from `rainbow(100)`. Your example should be a situation in which regular principal component analysis will fail—i.e., the first principal component score fails to properly unravel the points according to their order on the curve. (The coloring is used to visualize this ordering.)
+
+By passing the appropriate distance matrix to multidimensional scaling (not just Euclidean distances! this will just give us back principal component analysis), show that this method can produce a 1-dimensional representation of your curve, such that the points are in the correct order. Again, this ordering is demonsrated by the coloring.
+
+Your write up should include, in addition to a short exlanation of what you did and why it worked, 3 plots: the original 2-dimensional data, the first principal component score, and the 1-dimensional representation returned by multidimensional scaling (applied to your custom distances).
+
+**Ans:**
+We generate the data {($x, y$) : $x$ = $\theta$ cos($\theta$), y = $\theta$ sin($\theta$), $\theta$ $\in$ [0, 6$\pi$]} in Figure 1. First, apply the traditional PCA on the data and we can get the first principal component score for each point. In Figure 2, we observe that the order of color for the original data is not kept in first principal component score from PCA.
+
+Figure 3 shows the first component score using MDS and the order is kept by using MDS. Instead of using Euclidean distance, we adopt distance along the curve since Euclidean distance can not reflect the appropriate distance between the data points. MDS solves this problem by passing appropriate distance matrix to the algorithm so that the lower dimensional representation can preserve the original structure.
+
+```{r}
+# Figure 1: The original data for a spiral function
+th = seq(0,6*pi,length=100)
+x = th*cos(th)
+y = th*sin(th)
+data=cbind(x,y)
+plot(x,y,col=rainbow(100))
+```
+
+```{r}
+# Figure 2: The first component score from PCA
+newdata=scale(data,center=TRUE,scale=TRUE)
+pc=svd(newdata)
+plot(newdata%*%pc$v[,1],rep(0,length(newdata[,1])),col=rainbow(100),xlab="",ylab="")
+```
+
+```{r}
+# Figure 3: The first component score from MDS
+d = as.matrix(dist(1:100))
+A=-1/2 *d^2
+B = scale(A-rowMeans(A),center=T,scale=F)
+ee=eigen(B)
+Z = ee$vectors %*% diag(sqrt(ee$values))
+plot(Z[,1],rep(0,length(Z[,1])),xlab="",ylab="",col=rainbow(100))
+```
+
+**Problem 3**
+
+Load "smoother.R" into your R session. Now you should have the function smoother. This function takes `x` and `y` as arguments, which are the vectors of independent and dependent observa- tions, respectively. It smooths `y` on `x` and returns the vector of fitted values.
+
+**Q3a.** You’re going to write an R function to perform the alternative conditional expectations (ACE) algorithm. The function takes arguments:
+
+- `x,y`: vectors of observations, whose maximal correlation we want to compute.
+- `tol`: if the absolute difference in the correlation of `fx,gy` is smaller than `tol` across successive iterations, then we quit.
+- `maxiter`: the maximum number of iterations before quitting. 
+
+The function returns a list with elements:
+
+- `fx,gy`: the optimal transformations of `x,y`, respectively, as determined by your ACE algorithm.
+- `maxcor`: the maximal correlation of `x,y`, i.e., the correlation of `fx,gy`.
+- `iter`: the number of iterations performed by your ACE algorithm.
+
+Remember that the functions `fx,gy` should be centered and scaled at each iteration, i.e., these vectors should be centered to have mean zero and scale to have sum of squares equal to one.
+
+Load the file “ace.Rdata”. Now you should have a list `ace.data`, that contains 8 elements, each of which is a data set. These are `perf.lin`, `perf.quad`, `perf.cubic`, `perf.circle`, `noisy.lin`, `noisy.indep`, `noisy.pwcubic`, `noisy.checker`. Each of these is in turn a list with two elements, `x` and `y`. So, e.g., the data for the perfect linear dat set can be accessed using `ace.data$perf.lin$x` and `ace.data$perf.lin$y`.
+
+**Ans:** 
+The code for the “my.ace” function is given below.
+```{r}
+load("/Users/shengli/Desktop/ace.Rdata")
+source("smoother.R")
+my.ace = function(x, y, tol=1e-6, maxiter=500, verb=F) {
+    n = length(x)
+    fx = x-mean(x)
+    fx = fx/sqrt(sum(fx^2))
+    gy = y
+    oldcor = 2
+    for (k in 1:maxiter) {
+        gy = smoother(y,fx)
+        gy = gy-mean(gy)
+        gy = gy/sqrt(sum(gy^2))
+        fx = smoother(x,gy)
+        fx = fx-mean(fx)
+        fx = fx/sqrt(sum(fx^2))
+        cor = sum(fx*gy)
+        if (k>1 & abs(cor-oldcor)<tol) break
+        oldcor = cor
+    }
+    return(list(x=x,y=y,fx=fx,gy=gy,maxcor=cor,iter=k))
+}
+```
+
+**Q3b.** Run `my.ace()` on each of the perfect data sets (first 4 data sets in `ace.data`). For each data set, report the maximal correlation. Also for each data set, produce a figure of 4 plots (using `par(mfrow=c(2,2))`), where the top left shows the data (i.e., `x` vs `y`), the top right shows the transformed data (i.e., `fx` vs `gy`), the bottom left shows the transformation of `x` (i.e., `x` vs `fx`), and the bottom right shows the transformation of `y` (i.e., `y` vs `gy`). Briefly comment on the transformations for each data set. Do they make sense?
+
+**Ans:**
+Run the `my.ace()` function on the four perfect data sets, we have the results in Figures 4, 5, 6 and 7. The maximal correlation for each case is displayed below. We can see that the maximal correlation for all cases is approximately 1, which means we can find a perfect transformation for x and y so that the correlation between transformed x and y is 1 when there is no noise.
+
+```{r, fig.height=11, fig.width=11}
+# Figure 4: Perfect Linear
+perflinear <- my.ace(ace.data$perf.lin$x, ace.data$perf.lin$y)
+par(mfrow=c(2,2))
+plot(perflinear$x, perflinear$y, xlab="x", ylab="y", main="Data")
+plot(perflinear$fx, perflinear$gy, xlab="f(x)", ylab="g(y)", main="Transformed data")
+plot(perflinear$x, perflinear$fx, xlab="x", ylab="f(x)", main="Transformation of x")
+plot(perflinear$y, perflinear$gy, xlab="y", ylab="g(y)", main="Transformation of y")
+```
+
+```{r, fig.height=11, fig.width=11}
+# Figure 5: Perfect Quadratic
+perfquadr <- my.ace(ace.data$perf.quad$x, ace.data$perf.quad$y)
+par(mfrow=c(2,2))
+plot(perfquadr$x, perfquadr$y, xlab="x", ylab="y", main="Data")
+plot(perfquadr$fx, perfquadr$gy, xlab="f(x)", ylab="g(y)", main="Transformed data")
+plot(perfquadr$x, perfquadr$fx, xlab="x", ylab="f(x)", main="Transformation of x")
+plot(perfquadr$y, perfquadr$gy, xlab="y", ylab="g(y)", main="Transformation of y")
+```
+
+```{r, fig.height=11, fig.width=11}
+# Figure 6: Perfect Cubic
+perfcubic <- my.ace(ace.data$perf.cubic$x, ace.data$perf.cubic$y)
+par(mfrow=c(2,2))
+plot(perfcubic$x, perfcubic$y, xlab="x", ylab="y", main="Data")
+plot(perfcubic$fx, perfcubic$gy, xlab="f(x)", ylab="g(y)", main="Transformed data")
+plot(perfcubic$x, perfcubic$fx, xlab="x", ylab="f(x)", main="Transformation of x")
+plot(perfcubic$y, perfcubic$gy, xlab="y", ylab="g(y)", main="Transformation of y")
+```
+
+```{r, fig.height=11, fig.width=11}
+perfcir <- my.ace(ace.data$perf.circle$x, ace.data$perf.circle$y)
+par(mfrow=c(2,2))
+plot(perfcir$x, perfcir$y, xlab="x", ylab="y", main="Data")
+plot(perfcir$fx, perfcir$gy, xlab="f(x)", ylab="g(y)", main="Transformed data")
+plot(perfcir$x, perfcir$fx, xlab="x", ylab="f(x)", main="Transformation of x")
+plot(perfcir$y, perfcir$gy, xlab="y", ylab="g(y)", main="Transformation of y")
+```
+
+```{r}
+perflinear$maxcor
+perfquadr$maxcor
+perfcubic$maxcor
+perfcir$maxcor
+```
+
+**Q3c.** Repeat (b) for the noisy data sets (last 4 data sets in `ace.data`). What in particular do you notice about the transformations for the `noisy.lin` data set? Also, what is the reported maximal correlation for the `noisy.checker` data set? Looking at the transformations from the ACE algorithm, explain why this happened. Is this a desirable outcome?
+
+**Ans:** 
+Run the `my.ace()` function on the four noisy data sets, we have the following results in Figure 8, 9, 10 and 11. The maximal correlation for each case is displayed below. The maximal correlation for noisy linear and noisy piecewise cubic cases are 0.9 and 0.95 respectively. Although we can not find a perfect transformation for the noisy data, the maximal correlation is still big and the resulting transformed data seem approximately linear with noise added. But for independent data, the maximal correlation is only 0.12 which suggests that it is impossible to find transformation to make data linear in the completely independent case. The interesting phenomenon is the maximal correlation is almost 1 in the noise checker case. We want to point out it is because the step functions have perfect correlation in the ace algorithm although x and y are far from perfectly dependent. This would happen in the population as well—if X and Y were jointly distributed uniformly over those two checker boxes, step functions would still give perfect correlation.
+
+```{r, fig.height=11, fig.width=11}
+# Figure 8: Noisy Linear
+noisylinear <- my.ace(ace.data$noisy.lin$x, ace.data$noisy.lin$y)
+par(mfrow=c(2,2))
+plot(noisylinear$x, noisylinear$y, xlab="x", ylab="y", main="Data")
+plot(noisylinear$fx, noisylinear$gy, xlab="f(x)", ylab="g(y)", main="Transformed data")
+plot(noisylinear$x, noisylinear$fx, xlab="x", ylab="f(x)", main="Transformation of x")
+plot(noisylinear$y, noisylinear$gy, xlab="y", ylab="g(y)", main="Transformation of y")
+```
+
+```{r, fig.height=11, fig.width=11}
+# Figure 9: Noisy Independent
+noisyindept <- my.ace(ace.data$noisy.indep$x, ace.data$noisy.indep$y)
+par(mfrow=c(2,2))
+plot(noisyindept$x, noisyindept$y, xlab="x", ylab="y", main="Data")
+plot(noisyindept$fx, noisyindept$gy, xlab="f(x)", ylab="g(y)", main="Transformed data")
+plot(noisyindept$x, noisyindept$fx, xlab="x", ylab="f(x)", main="Transformation of x")
+plot(noisyindept$y, noisyindept$gy, xlab="y", ylab="g(y)", main="Transformation of y")
+```
+
+```{r, fig.height=11, fig.width=11}
+# Figure 10: Noisy Piecewise Cubic
+noisypwcub <- my.ace(ace.data$noisy.pwcubic$x, ace.data$noisy.pwcubic$y)
+par(mfrow=c(2,2))
+plot(noisypwcub$x, noisypwcub$y, xlab="x", ylab="y", main="Data")
+plot(noisypwcub$fx, noisypwcub$gy, xlab="f(x)", ylab="g(y)", main="Transformed data")
+plot(noisypwcub$x, noisypwcub$fx, xlab="x", ylab="f(x)", main="Transformation of x")
+plot(noisypwcub$y, noisypwcub$gy, xlab="y", ylab="g(y)", main="Transformation of y")
+```
+
+```{r, fig.height=11, fig.width=11}
+# Figure 11: Noisy Checker
+noisycheck <- my.ace(ace.data$noisy.checker$x, ace.data$noisy.checker$y)
+par(mfrow=c(2,2))
+plot(noisycheck$x, noisycheck$y, xlab="x", ylab="y", main="Data")
+plot(noisycheck$fx, noisycheck$gy, xlab="f(x)", ylab="g(y)", main="Transformed data")
+plot(noisycheck$x, noisycheck$fx, xlab="x", ylab="f(x)", main="Transformation of x")
+plot(noisycheck$y, noisycheck$gy, xlab="y", ylab="g(y)", main="Transformation of y")
+```
+
+```{r}
+noisylinear$maxcor
+noisyindept$maxcor
+noisypwcub$maxcor
+noisycheck$maxcor
+```

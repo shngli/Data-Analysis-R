@@ -1,0 +1,184 @@
+---
+title: "Solution 6"
+output: html_document
+---
+
+**Problem 2**
+
+We learned of three measures for impurity used by classification trees. Plot the expressions for misclassification error, Gini index, and cross-entropy as functions of $p$. When you plot cross-entropy, you can scale it by a constant so that it is equal to 1/2 when $p$ = 1/2. Are the curves similar?
+
+**Ans:**
+The three impurity measures are plotted, with cross-entropy scaled by a factor of 1/2 to bring it to the same range as the Gini index. We see the Gini Index and the Cross-entropy are similar, they both maximize at p = 1/2 and both are concave. The misclassification rate is obviously different in the sense that it is linear, however it shares many of the same properties: it is maximized at p = 1/2, equals zero at p = 0,1 and it is concave.
+
+```{r}
+p <- seq(0, 1, 0.001)
+
+# misclassification rate
+miscl <- 1 - pmax(p, 1-p)
+
+# Gini index
+gini <- 2*p*(1-p)
+
+# Cross entropy
+ce <- (p * log((1-p)/p) - log(1-p)) / (2*log(2))
+
+matplot(p, cbind(miscl, gini, ce), col=c("red", "green", "blue"), ylab = "Impurity Measure")
+legend("topright",pch=21,col=c("red", "green", "blue"), legend=c("Misclassification Rate","Gini Index","Cross-entropy"))
+```
+
+**Problem 4**
+
+This problem involves the “OJ” data set which is part of the “ISLR” package.
+
+**Q4a.** Create a training set containing a random sample of 800 observations, and a test set containing the remaining observations.
+
+**Q4b.** Fit a tree to the training data, with “Purchase” as the response and the other variables except for “Buy” as predictors. Use the “summary()” function to produce summary statistics about the tree, and describe the results obtained. What is the training error rate ? How many terminal nodes does the tree have?
+
+**Q4c.** Type in the name of the tree object in order to get a detailed text output. Pick one of the terminal nodes, and interpret the information displayed.
+
+**Ans 4a,b,c:** 
+We display the relevant code and resulting output for a-c. We see the tree has 7 terminal nodes, a training error rate of 15.8%. Only three variables end up being used in the tree's construction, `LoyalCH`, `SalesPriceMM`, `PriceDiff`; so the customer loyalty to Citrus Hill, the price of Minute Maid OJ and the price difference form the crucial deciding factors in a customer's purchases.
+
+```{r}
+library(tree)
+library(ISLR)
+set.seed(3)
+tr <- sample(1:nrow(OJ), 800)
+oj.tr <- OJ[tr,]
+oj.te <- OJ[-tr,]
+tree.oj <- tree(Purchase ~., oj.tr)
+summary(tree.oj)
+```
+
+```{r}
+tree.oj
+```
+
+**Q4d.** Create a plot of the tree, and interpret the results.
+
+**Q4e.** Predict the response on the test data, and produce a confusion matrix comparing the test labels to the predicted test labels. What is the test error rate?
+
+**Ans 4d,e:** 
+Looking at the last terminal node, we see if LoyalCH is high (greater than 0.765) then the customer is almost always (95% of the time) purchases Citrus Hill orange juice. Clearly the highly loyal customers stay highly loyal.
+
+We plot the tree with the following command.
+```{r}
+plot(tree.oj, main='OJ Purchase Decision Tree')
+text(tree.oj, pretty=0)
+```
+
+We apply this tree to our test set, and observe it obtains about 20% test error.
+```{r}
+full.te.predict <- predict(tree.oj, oj.te, type='class')
+table(full.te.predict, oj.te$Purchase)
+
+mean(full.te.predict != oj.te$Purchase)
+```
+
+**Q4f.** Apply the “cv.tree()” function to the training set in order to determine the optimal size tree.
+
+**Q4g.** Produce a plot with tree size on the x-axis and cross-validated classification error rate on the y-axis.
+
+**Q4h.** Which tree size corresponds to the lowest cross-validated classification error rate?
+
+**Q4i.** Produce a pruned tree corresponding to the optimal tree size obtained using cross-validation. If cross-validation does not lead to selection of a pruned tree, then create a pruned tree with five terminal nodes.
+
+**Q4j.** Compare the training error rates between the pruned and unpruned trees. Which is higher?
+
+**Q4k.** Compare the test error rates between the pruned and unpruned trees. Which is higher?
+
+**Ans 4f-k:**
+We compute the cross validation error whilst pruning the tree, and it vs tree size. We see it is minimized when the size is equal to 2 or 7. We choose the simpler model. We create the pruned tree and compare training/testing errors.
+
+```{r}
+# Apply cv.tree() to the training set to determine the optimal size tree
+cv.oj <- cv.tree(tree.oj, FUN = prune.misclass)
+cv.oj
+
+plot(cv.oj$size, cv.oj$dev, type = "b", xlab = "Tree size", ylab = "Cross Validation Error")
+```
+
+We choose the simpler model of size 2.
+```{r}
+prune.oj <- prune.misclass(tree.oj, best = 2)
+mean(predict(prune.oj, oj.tr, type='class')!=oj.tr$Purchase)
+mean(predict(prune.oj, oj.te, type='class')!=oj.te$Purchase)
+```
+
+Unpruned: Train = 15.8%, Test = 20%. Pruned: Train = 18.3%, Test = 21.5%. In this case we sacrifice some bias for a significantly lower variance model, it does appear to be slightly over-pruned however.
+
+**Problem 5**
+
+We now use boosting to predict “Salary” in the “Hitters” data set.
+
+**Q5a.** Remove the observations for whom the salary information is unknown, and then log-transform the salaries.
+
+**Q5b.** Create a training set consisting of the first 200 observations, and a test set consisting of the remaining observations.
+
+**Q5c.** Perform boosting on the training set with 1000 trees for a range of values of the shrinkage parameter λ. Produce a plot with different shrinkage values on the x-axis and the corresponding training set MSE on the y-axis.
+
+**Q5d.** Produce a plot with different shrinkage values on the x-axis and the corresponding test set MSE on the y-axis.
+
+**Ans 5a-d:**
+We prepare the data and apply boosting on a range of shrinkage parameters, plotting both the train and test MSE values resulting from the proposed shrinkage. The resulting plot is displayed
+
+```{r}
+library(ISLR)
+full.hit <- Hitters[!is.na(Hitters$Salary),]
+full.hit$Salary <- log(full.hit$Salary)
+
+tr <- sample(1:nrow(full.hit), 200)
+hit.tr <- full.hit[tr,]
+hit.te <- full.hit[-tr,]
+
+shrinkage <- seq(0,0.03,0.00005)
+tr.mse <- array(NA,length(shrinkage))
+te.mse <- array(NA,length(shrinkage))
+
+library(gbm)
+for (i in 1:length(shrinkage)) {
+  hit.boost <- gbm(Salary ~., data=hit.tr, distribution='gaussian',
+		n.trees=1000, shrinkage=shrinkage[i], verbose=F)
+	tr.mse[i] <- mean((predict(hit.boost, hit.tr, n.trees=1000) - hit.tr$Salary)^2)
+	te.mse[i] <- mean((predict(hit.boost, hit.te, n.trees=1000) - hit.te$Salary)^2)
+}
+```
+
+**Q5e.** Compare the test MSE of boosting to the test MSE that results from applying two of the regression approaches.
+
+**Ans:**
+We compare the boosting's minimum test error of 0.456 with the test error with that of a simple linear model, and also lasso regression. Linear regression obtains a slightly better MSE than lasso, which is unsurprising as we have a much larger number of samples than covariates so we don't really need to enforce sparsity. Nevertheless the MSE of linear regression, 0.62, is vastly greater than boosting's 0.45. Boosting wins.
+```{r}
+min(te.mse)
+
+#Linear Regression
+hit.lm <- lm(Salary ~., hit.tr)
+mean((predict(hit.lm, hit.te) - hit.te$Salary)^2)
+
+library(glmnet)
+hit.las.cv <- cv.glmnet(as.matrix(hit.tr[,-c(19,20,14,15)]),
+  as.matrix(hit.tr[,19]), alpha=1)
+hit.las <- glmnet(as.matrix(hit.tr[,-c(19,20,14,15)]),
+	as.matrix(hit.tr[,19]), alpha=1, lambda=hit.las.cv$lambda.min)
+mean((predict(hit.las,
+	as.matrix(hit.te[,-c(19,20,14,15)])) - hit.te$Salary)^2)
+```
+
+**Q5f.** Which variables appear to be the most important predictors in the boosted model?
+
+**Q5g.** Now apply bagging to the training set. What is the test set MSE for this approach?
+
+**Ans 5f,g:**
+We investigate the variable importance by plotting our boosting model, using the `summary()` command.
+```{r}
+summary(hit.boost)
+```
+
+We see the five most influential variables are CAtBat, CRBI, CHits, CWalks, CRuns. These are all career statistics; so how many career bats, runs batted in, hits, walks and runs the player has made is, in respective order, the most influential information pertaining to his salary. This is quite surprsing, it is not based upon the current year's statistics.
+
+We apply bagging to the training set, using random forests specifically. To enforce bagging, and not variable subsampling, we assign mtry to equal the number of covariates in our model, which is 19. The observed test MSE 0f 0.49 is considerably better than that of linear or lasso regression, however it is still slightly greater than boosting's 0.45.
+```{r}
+library(randomForest)
+hit.rf <- randomForest(Salary ~., hit.tr, mtry=(ncol(hit.tr)-1), importance=T)
+mean((predict(hit.rf, hit.te) - hit.te$Salary)^2)
+```

@@ -1,0 +1,159 @@
+---
+title: "Solution 2"
+output: html_document
+---
+
+**Problem 1** 
+
+**Q1a.**
+You’re going to write an R function to compute the CH index of $K$-means clustering assignments, over a range of the number of clusters $K$. Recall that for a given number of clusters $K$, we run $K$-means to get the cluster assignments $C(K)$, and then we compute the CH index as 
+\[CH(K) = \frac{B(K)/(K-1)}{W(K)/(n-K)'}\]
+where $W(K)$, $B(K)$ are the within- and between-cluster variations for $C(K)$.
+
+You’re going to use the `kmeans()` function to perform $K$-means clustering. This function returns a list, and two of the items are the within- and between-cluster variations (i.e., it computes these for you).
+
+The function takes arguments: 
+
+- `x`: the data matrix, which has observations along the rows, and features along the columns.
+- `kmax`: this is the maximum number of clusters to consider. You must compute the CH index for the number of clusters $K$ = 2, 3, . . . $K_{max}$. (Remember that the CH index is not defined for $K$ = 1.)
+- `iter.max`: to be passed to the `kmeans()` function. This is the maximum number of iterations allowed before the `kmeans()` algorithm terminates itself. It defaults to 100 (i.e., this is the default value if the user doesn’t specify it when caling the function.)
+- `nstart`: to be passed to the `kmeans()` function. This is the number of times to run the `kmeans()` algorithm with random starts. It defaults to 10.
+- `algorithm`: to be passed to the `kmeans()` function. This is the type of algorithm used by `kmeans`. It defaults to “Lloyd”.
+
+The function returns a list with elements:
+
+- `k`: these are the values of $K$ that were tried, namely, 2, . . . $K_{max}$.
+- `ch.index`: the corresponding CH index scores, as computed by your function.
+
+Load "kmeans.Rdata" and now you should have three data sets x1, x2, and x3.
+
+**Ans:**
+The following code implements the ch.index function.
+```{r}
+ch.index = function(x,kmax,iter.max=100,nstart=10,algorithm="Lloyd") {
+  ch = numeric(length=kmax-1)
+	n = nrow(x)
+	for (k in 2:kmax) {
+		a = kmeans(x,k,iter.max=iter.max,nstart=nstart,algorithm=algorithm)
+		w = a$tot.withinss
+		b = a$betweenss
+		ch[k-1] = (b/(k-1))/(w/(n-k))
+		}
+	return(list(k=2:kmax,ch=ch))
+}
+```
+
+**Q1b.** Run your `ch.index` function on `x1` with `kmax=10`, and the default options for the rest of the arguments. Plot the results, with the x-axis showing the number of clusters $K$ and the y-axis giving the CH index score $CH(K)$.
+
+**Ans:**
+We run ch.index on the given x1 data and plot K versus CH(K).
+```{r}
+load('/Users/shengli/Desktop/kmeans.Rdata')
+a1 = ch.index(x1,kmax=10)
+k1.hat = a1$k[which.max(a1$ch)]
+k1 = kmeans(x1, k1.hat, iter.max=100, nstart=10, algorithm="Lloyd")
+plot(a1$k,a1$ch, xlab='K', ylab='CH(K)', type='b',
+  main='K-Means Clustering : CH Index vs K' )
+```
+
+**Q1c.** What estimated number of clusters $K\hat{}$ would you choose based on the CH index scores? Rerun `kmeans` on `x1` with $K\hat{}$ as the number of clusters, and with the same options used by your function (`iter.max=100`, `nstart=10`, `algorithm="Lloyd"`) to get the cluster centers and cluster assignments. Plot `x1`, plot the cluster centers on top, and either color-code the points (using `col=`) or pch-code the points (using `pch=`) according to cluster membership. Does $K\hat{}$ look like a reasonable choice?
+
+**Ans:**
+Generative code displayed below. We see $K\hat{}$ = 3 maximizes the CH index. From the resulting cluster plot we see that it’s a reasonable choice as the clusters are well formed, i.e. both compact within cluster and spaced out between cluster.
+```{r}
+plot(x1, col=(k1$cluster+1), pch=k1$cluster, 
+  main='x1 Colored by K-Means Cluster Assignment')
+points(k1$center, pch=8,  cex=4, col=1)
+```
+
+**Q1d.** Repeat parts (b) and (c) but on each of `x2` and `x3`. Do the CH index curves give just as obvious answers for the estimated number of clusters as they did for `x1`? What makes these data sets different or harder?
+
+**Ans:** The CH index plots do not give a resounding answer for x2 & x3 in comparison to x1. This is because there are several values of K that score a high CH index. `x2` scores a high CH index for K=2 and K=7; `x3` scores a high CH index for several values of K:5, 6, 7, 9.
+
+```{r, fig.height=6, fig.width=12}
+# x2
+a2 = ch.index(x2,kmax=10,iter.max=100)
+k2.hat = a2$k[which.max(a2$ch)]
+
+par(mfrow=c(1,2))
+k2 = kmeans(x2, k2.hat, iter.max=100, nstart=10, algorithm="Lloyd")
+plot(a2$k,a2$ch, xlab='K', ylab='CH(K)', type='b',
+  main='K-Means Clustering : CH Index vs K' )
+plot(x2, col=(k2$cluster+1), pch=k2$cluster,
+  main='x2 Colored by K-Means Cluster Assignment')
+points(k2$center, pch=8,  cex=4, col=1)
+```
+
+```{r, fig.height=6, fig.width=12}
+# x3
+a3 = ch.index(x3,kmax=10,iter.max=100)
+k3.hat = a3$k[which.max(a3$ch)]
+
+par(mfrow=c(1,2))
+k3 = kmeans(x3, k3.hat, iter.max=100, nstart=10, algorithm="Lloyd")
+plot(a3$k,a3$ch, xlab='K', ylab='CH(K)', type='b',
+  main='K-Means Clustering : CH Index vs K' )
+plot(x3, col=(k3$cluster+1), pch=k3$cluster,
+  main='x3 Colored by K-Means Cluster Assignment')
+points(k3$center, pch=8,  cex=4, col=1)
+```
+
+**Problem 3**
+
+Load the file “three.Rdata”, now you should have a matrix threes that has dimension 658 × 256. (This data set was taken from the data page on http://www-stat.stanford.edu/~tibs/ElemStatLearn/.) Each row of the matrix corresponds to an image of a “3” that was written by a different person. Hence each row vector is of length 256, corresponding to a 16 × 16 pixels image that has been unraveled into a vector, and each pixel takes grayscale values between −1 and 1. Load the file “plot.digit.R”, this gives a function plot.digit that can plot any of the images, i.e., any row of the matrix `threes`. Try it out with `plot.digit(threes[1,])`.
+
+**Q3a.** Compute the principal component directions and principal component scores of `threes`. Plot the first two principal component scores (the x-axis being the first score and the y-axis being the second score). Note that each point in this plot corresponds to an image of a “3”.
+
+**Q3b.** For each of the first two principal component scores, compute the following percentiles: 5%, 25%, 50%, 75%, 95%. Draw these values as vertical and horizontal lines on top of your plot (i.e., vertical for the percentiles of the first principal component score, and horizontal for those of the second.) Hint: use `quantile()` for the percentiles, and `abline()` to draw the lines.
+
+**Q3c.**  Now you want to identify a point (i.e., an image of a “3”) close to each of the vertices of the grid on your plot. This can be done by using the `identify()` function with `n=25`, which allows you to click on the plot 25 times (since there are 25 vertices). Each time you click, it will print the index of the point that is closest to your click’s location. Make sure you click left-to-right, and top-to-bottom, and record the indices in that order.
+
+**Ans 3a,b,c:**
+We load the threes image data in, take its principal components and plot the first two. Using the `quantile()` function, we can extract the relevant percentiles - stored in the ‘probe’ vector. This is done for both principal components and they are displayed as dashed lines. The `identify()` function is used and 25 data elements are picked out in order from left to right, top to bottom.
+```{r, fig.height=6, fig.width=6}
+# 3a
+load("/Users/shengli/Desktop/three.Rdata")
+source("plot.digit.R")
+pc = prcomp(threes,center=T,scale=F)
+plot(pc$x[,1],pc$x[,2], main="The first two principal components of 'threes' image data")
+
+# 3b
+probs = c(0.05,0.25,0.5,0.75,0.95)
+q1 = quantile(pc$x[,1],probs)
+q2 = quantile(pc$x[,2],probs)
+abline(v=q1,h=q2,lty=2)
+
+# 3c
+sorted.inds = identify(pc$x[,1],pc$x[,2],n=25)
+inds = c(73,238,550,82,640,284,84,133,51,322,
+392,241,645,229,500,247,344,142,405,649,184,
+149,234,633,176)
+```
+
+**Q3d.** Plot all of the images of “3”s that you picked out in part (c), in an order that corresponds to the vertices of the grid.
+
+**Ans:**
+We use the plot.digit function to plot the selected data points. ’mar’ simply sets the margin of the multiple-plot window.
+```{r, fig.height=10, fig.width=10}
+b = 0.2
+par(mfrow=c(5,5), mar=c(b,b,b,b))
+for (i in inds) plot.digit(threes[i,])
+```
+
+**Q3e.** Looking at these digits, what can be said about the nature of the first two principal component scores? (The first principal component score is increasing as you move from left-to-right in any of the rows. The second principal component score is decreasing as you move from top-to-bottom in any of the columns.)
+
+**Ans:**
+Inspecting the characters from left to right, we see the ‘3’ becomes curvier and wider. Namely, when the first principal component is small the ‘3’ is quite tall and straight, when it is large the ‘3’ is less linear and more curvy. 
+
+The second component appears to characterize the width of the pen used, as we look down we see thicker ink width. When the second component is large the ink width is thin, when it’s small the ink width is thick.
+
+**Q3f.** Plot the proportion of variance explained by the first $k$ principal component directions, as a function of $k$ = 1, . . . 256. How many principal component directions would we need to explain 50% of the variance? How many to explain 90% of the variance?
+
+**Ans:**
+We plot the proportion of variance explained by the first k principal components. We see that (at least) 50% of the variance is explained with 7 components and 90% of the variance is explained with 52.
+```{r, fig.height=6, fig.width=6}
+pv = cumsum(pc$sdev^2)/sum(pc$sdev^2)
+plot(1:256, pv, xlab='Number of Components Used', ylab='Proportion of Variance', type="l")
+min(which(pv>=0.5))
+min(which(pv>=0.9))
+```

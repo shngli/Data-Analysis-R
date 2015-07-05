@@ -1,0 +1,159 @@
+---
+title: "Solution 4"
+output: html_document
+---
+
+**Problem 3**
+
+In this problem, you will consider choosing the tuning parameters for both ridge regession and the lasso, using 10-fold cross-validation. First load “plot-funs.R” and “bstar.Rdata”. 
+
+We begin with a true signal `bstar`. Although this is stored as a vector of length p = 2500, `bstar` really represents an image of dimension 50 × 50. You can plot it by calling `plot.image(bstar)`. This image is truly sparse, in the sense that 2084 of its pixels have a value of 0, while 416 pixels have a value of 1. You can think of this image as a toy version of an MRI image that we are interested in collecting.
+
+Suppose that, because of the nature of the machine that collects the MRI image, it takes a long time to measure each pixel value individually, but it’s faster to measure a linear combination of pixel values. We measure n = 1300 linear combinations, with the weights in the linear combination being random, in fact, independently distributed as N(0,1). These measurements are given by the entries of the vector `x %*% bstar` in our R code. Because the machine is not perfect, we don’t get to observe this directly, but we see a noisy version of this. Hence, in terms of our R code, we observe `y = x %*% bstar + rnorm(n,sd=5)`. Now the question is: can we model `y` as a linear combination of the columns of `x` to recover some coefficient vector that is close to `bstar`? Roughly speaking, the answer is yes. Key points here: although the number of measurements n = 1300 is smaller than the dimension p = 2500, the true vector `bstar` is sparse, and the weights in a linear combination are i.i.d normal. This is the idea behind the field of compressed sensing.
+
+The code below is setup to perform ridge regression of `y` on `x`, and the lasso of `y` on `x`, with the tuning parameter for each method selected by cross-validation. You will fill in the missing pieces. It’s helpful to read through the whole file to get a sense of what’s to be accomplished. 
+
+**Q3a.** Fill in the missing parts. There are 4 missing parts marked by `# TODO`. When you’re getting started, just to check that things are running without errors, it could be helpful to run the cross-validation loop for only `k=1`. It might also be helpful to read the documentation for the `glmnet()` function, which you will use to perform ridge regression and the lasso.
+
+**Ans:**
+The missing code snippets are displayed below.
+```{r}
+library(glmnet)
+source("plotfuns.R")
+load("/Users/shengli/Desktop/bstar.Rdata")
+
+plot.image(bstar)
+
+p = length(bstar)
+set.seed(0)
+n = 1300
+x = matrix(rnorm(n*p),nrow=n)
+y = x%*%bstar + rnorm(n,sd=5)
+
+K = 10
+d = ceiling(n/K)
+set.seed(0)
+i.mix = sample(1:n)
+folds = vector(mode="list",length=K)
+# 1) TODO
+# Here you need to divide up i.mix into K equal size chunks,
+# and then put these chunks in the elements of the folds list, 
+# folds[[1]], folds[[2]], ..., folds[[K]]
+folds = vector(mode="list",length=K)
+for (k in 1:(K-1)) {
+  folds[[k]] = i.mix[((k-1)*d+1):(k*d)]
+}
+folds[[K]] = i.mix[((K-1)*d+1):n]
+
+# Tuning parameter values for lasso, and ridge regression
+lam.las = c(seq(1e-3,0.1,length=100),seq(0.12,2.5,length=100)) 
+lam.rid = lam.las*1000
+
+nlam = length(lam.las)
+# These two matrices store the prediction errors for each
+# observation (along the rows), when we fit the model using
+# each value of the tuning parameter (along the columns)
+e.rid = matrix(0,n,nlam)
+e.las = matrix(0,n,nlam)
+
+for (k in 1:K) {
+	cat("Fold",k,"\n")
+
+	i.tr = unlist(folds[-k])
+	i.val = folds[[k]]
+
+	x.tr = x[i.tr,]   # training predictors
+	y.tr = y[i.tr]    # training responses
+	x.val = x[i.val,] # validation predictors
+	y.val = y[i.val]  # validation responses
+
+	# 2) TODO
+	# Now use the function glmnet on the training data to get the 
+	# ridge regression solutions at all tuning parameter values in
+	# lam.rid, and the lasso solutions at all tuning parameter 
+	# values in lam.las
+	#a.rid = glmnet() # for the ridge regression solutions, use alpha=0
+	#a.las = glmnet() # for the lasso solutions, use alpha=1
+	a.rid = glmnet(x.tr,y.tr,lambda=lam.rid,alpha=0)
+	a.las = glmnet(x.tr,y.tr,lambda=lam.las,alpha=1)
+
+	# Here we're actually going to reverse the column order of the
+	# a.rid$beta and a.las$beta matrices, because we want their columns
+	# to correspond to increasing lambda values (glmnet's default makes
+	# it so that these are actually in decreasing lambda order), i.e.,
+	# in the same order as our lam.rid and lam.las vectors
+	rid.beta = as.matrix(a.rid$beta[,nlam:1])
+	las.beta = as.matrix(a.las$beta[,nlam:1])
+
+	yhat.rid = x.val%*%rid.beta
+	yhat.las = x.val%*%las.beta
+	
+	e.rid[i.val,] = (yhat.rid-y.val)^2
+	e.las[i.val,] = (yhat.las-y.val)^2
+}
+
+# 3) TODO
+# Here you need to compute: 
+# -cv.rid, cv.las: vectors of length nlam, giving the cross-validation
+#  errors for ridge regresssion and the lasso, across all values of the
+#  tuning parameter
+# -se.rid, se.las: vectors of length nlam, giving the standard errors
+#  of the cross-validation estimates for ridge regression and the lasso, 
+#  across all values of the tunining parameter
+cv.rid = colMeans(e.rid)
+cv.las = colMeans(e.las)
+
+pe.rid = matrix(0,K,nlam)
+pe.las = matrix(0,K,nlam)
+for (k in 1:K) {
+	i.val = folds[[k]]
+	pe.rid[k,] = colMeans(e.rid[i.val,])
+	pe.las[k,] = colMeans(e.las[i.val,])
+}
+se.rid = apply(pe.rid,2,sd)/sqrt(K)
+se.las = apply(pe.las,2,sd)/sqrt(K)
+
+# Usual rule for choosing lambda
+i1.rid = which.min(cv.rid)
+i1.las = which.min(cv.las)
+
+# 4) TODO
+# One standard error rule for choosing lambda
+# Here you need to compute:
+# -i2.rid: the index of the lambda value in lam.rid chosen
+#  by the one standard error rule 
+# -i2.las: the index of the lambda value in lam.las chosen
+#  by the one standard error rule
+i1.rid = which.min(cv.rid)
+i2.rid = max(which(cv.rid<=cv.rid[i1.rid]+se.rid[i1.rid]))
+
+i1.las = which.min(cv.las)
+i2.las = max(which(cv.las<=cv.las[i1.las]+se.las[i1.las]))
+
+```
+
+**3b.** Plot the cross-validation error curves for each of ridge regression and the lasso. You can do this using the function `plot.cv()`, as demonstrated by the code at the end. For both ridge regression and the lasso, what value of λ is chosen by the usual rule? What value is chosen by the one standard error rule? Which method, ridge regression or the lasso, has a smaller minimum cross-validation error?
+
+**Ans:**
+The resulting cross validation error plots are shown in Figure 1. For ridge regression, the usual rule chooses λ = 4 and the s.e. rule chooses λ = 15. For the lasso, the usual rule chooses λ = 0.057 and the s.e. rule chooses λ = 0.144. The lasso has smaller minimum cross-validation error than ridge regression, circa 250 vs 300.
+
+```{r, fig.height=6, fig.width=12}
+# Figure 1
+par(mfrow=c(1,2))
+plot.cv(cv.rid,se.rid,lam.rid,i1.rid,i2.rid, 
+  main='CV Error for Ridge Regression' )
+plot.cv(cv.las,se.las,lam.las,i1.las,i2.las,
+	main='CV Error for Lasso' )
+```
+
+**Q3d.** Look at the squared error between the ridge regression and the lasso coefficients that you computed in (c), for both the estimate chosen by cross-validation and that from the one standard error rule, and the true coefficient vector `bstar`. What has the lowest squared error?
+
+**Ans:**
+We calculate the following sum of square errors and observe that the lasso using standard cross validation results in the smallest square error.
+
+```{r}
+sum((bstar-rid.beta[,i1.rid])^2)
+sum((bstar-rid.beta[,i2.rid])^2)
+sum((bstar-las.beta[,i1.las])^2)
+sum((bstar-las.beta[,i2.las])^2)
+```
