@@ -1,0 +1,5 @@
+[Assignment 1](http://rpubs.com/shngli/91160)
+[Assignment 2](http://rpubs.com/shngli/91161)
+[Assignment 3](http://rpubs.com/shngli/91162)
+[Assignment 4](http://rpubs.com/shngli/91163)
+[Assignment 6](http://rpubs.com/shngli/91166)
