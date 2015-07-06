@@ -1,4 +1,4 @@
-Ryan Tibshirani's [Data Mining course](http://www.stat.cmu.edu/~ryantibs/datamining/)
+CMU Statistics 36-662 [Data Mining course](http://www.stat.cmu.edu/~ryantibs/datamining/)
 
 Data mining example R-scripts:
 
