@@ -7,5 +7,4 @@ References
 1. **R Cookbook** by  Paul Teetor
 2. **R Graphics Cookbook** by Winston Chang, companion website [here](http://www.cookbook-r.com/)
 3. **R in a Nutshell** by Joseph Adler
-4. Ryan Tibshirani's [Data Mining course](http://www.stat.cmu.edu/~ryantibs/datamining/) and [Advanced Methods for Data Analysis course](http://www.stat.cmu.edu/~ryantibs/advmethods/)
-5. [60+ Resources to Improve Your R Skills](http://bit.ly/Rresources)
+4. [60+ Resources to Improve Your R Skills](http://bit.ly/Rresources)
