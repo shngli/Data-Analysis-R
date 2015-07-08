@@ -6,10 +6,11 @@ Data mining example R-scripts:
 2. Clustering analysis (clustering.R, kclust.R)
 3. Dimension reduction (dimension.R)
 4. Canonical correlation analysis (correlation.R)
-5. Linear regression (regression.R)
+5. Linear regression (regression.R, regression2.R, knn.R, cd4.data)
 6. Ridge regression (ridge.R)
 7. Cross validation (cross validation.R)
-8. Decision boundaries (classification.R)
+8. Decision boundaries (classification.R, classification2.R)
+9. Decision trees (trees.R, olive.txt)
 
 Assignment solution codes:
 
