@@ -1,4 +1,4 @@
-CMU Statistics 36-662 [Data Mining course](http://www.stat.cmu.edu/~ryantibs/datamining/)
+CMU Statistics 36-662 [Data Mining course](http://www.stat.cmu.edu/~ryantibs/datamining/) and UMD [Practical Machine Learning](http://www.cbcb.umd.edu/~hcorrada/PracticalML/)
 
 Data mining example R-scripts:
 
