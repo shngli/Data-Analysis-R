@@ -9,6 +9,7 @@ Data mining example R-scripts:
 5. Linear regression (regression.R)
 6. Ridge regression (ridge.R)
 7. Cross validation (cross validation.R)
+8. Decision boundaries (classification.R)
 
 Assignment solution codes:
 
