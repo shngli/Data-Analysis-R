@@ -1,4 +1,4 @@
-Data set is available [here](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip)
+Data set is available [here](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip). RPub link [here](http://rpubs.com/shngli/92718).
 
 **Instructions**:
 
