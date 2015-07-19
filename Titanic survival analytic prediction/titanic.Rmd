@@ -1,0 +1,436 @@
+---
+title: "Titanic Survival Analysis"
+author: "Sheng Li"
+output: html_document
+---
+
+The RMS Titanic was a British liner that sank on April 15th 1912 during her maiden voyage. This report analyzes the Titanic data for 1309 passengers and crews to determine how passengers' survival depended on other measured variables in the dataset.
+
+```{r}
+# Load data
+titanic <- read.csv("Titanic_data.csv",head=TRUE,sep=",")
+str(titanic)
+```
+
+View the first 5 rows of the Titanic dataset:
+```{r}
+titanic[1:5,]
+```
+
+### Part 2: Data munging
+Transform passenger names from factor variables to character variables:
+```{r}
+titanic$name <- as.character(titanic$name)
+```
+Transform survived and passenger class from integers to factor variables:
+```{r}
+titanic$survived <- as.factor(titanic$survived)
+titanic$pclass <- as.factor(titanic$pclass)
+```
+
+### Part 3: Provide data summary
+**3a)** Create a 3-way table for the variables `survived` (passengers' survival; 0=No, 1=Yes), `pclass` (passenger class; 1=Upper class, 2=Middle class, 3=Lower class) and `sex` (male and female).
+```{r}
+titanicTab <- xtabs(~survived + pclass + sex, titanic)
+ftable(titanicTab) 
+```
+
+**3b)** Display the five-number summaries and histogram plots for `age` (passengers' age) and `fare` (passengers' fare in pounds):
+```{r}
+fivenum(titanic$age, na.rm=T)
+fivenum(titanic$fare, na.rm=T)
+```
+
+```{r, fig.height=8, fig.width=16}
+library(ggplot2)
+library(gridExtra)
+plot1 <- qplot(titanic$age, xlab="Passenger Age (in years)")
+plot2 <- qplot(titanic$fare, xlab="Passenger Fare (in pounds)")
+grid.arrange(plot1, plot2, ncol=2)
+```
+
+**3c)** Display the frequency tables for `sibsp` (number of siblings or spouses aboard Titanic) and `embarked` (port of embarkation; C=Cherbourg, Q=Queenstown, S=Southampton).
+```{r}
+sibspTab <- table(titanic$sibsp)
+sibspTab
+
+embarkedTab <- table(titanic$embarked)
+embarkedTab
+```
+
+#### Inspect the data for unusual patterns.
+
+**3di)** 17 passengers travelled on zero fare.
+```{r}
+summary(titanic$fare==0)
+```
+
+**3dii)** 4 passengers (Ms. Ward, Mr and Mrs Cardeza, and Mr Lesurer) paid the most expensive fare at 512.33 pounds.
+```{r}
+# maximum fare
+expFare <- max(titanic$fare, na.rm=T)
+expFare
+
+# number of passengers that paid max fare
+(1:1309)[!is.na(titanic$fare) & titanic$fare == expFare]
+
+# names of the 4 passengers
+a = 1;
+expName <-array(0, dim=c(4,1))
+for (i in 1 : 1309){
+  if (!is.na(titanic$fare[i]) & titanic$fare[i] == expFare){
+    expName[a] = titanic$name[i];
+    a = a + 1;
+  }
+}
+expName
+```
+
+**3diii)** 33 passengers had at least 6 family members on board, with their names displayed below.
+
+```{r}
+length((1:1309)[titanic$sibsp + titanic$parch >= 6])
+
+# names of the 33 passengers with at least 6 other family members on Titanic
+bigFam <- array(0, dim=c(33,1))
+a = 1;
+for (i in 1 : 1309){
+  if (titanic$sibsp[i] + titanic$parch[i] > 5){
+    bigFam[a] = titanic$name[i];
+    a = a + 1;
+  }
+}
+bigFam
+```
+
+**3div)** There were some big travel groups where at least 6 passengers shared the same boarding ticket. Among the 930 boarding tickets, 12 tickets had at least 6 passengers sharing the same ticket, with the 86 passengers' names displayed below.
+
+```{r}
+# number of unique tickets
+length(unique(titanic$ticket))
+
+# number of tickets (bottom row) shared by number of passengers (top row)
+table(table(titanic$ticket))
+
+# names of the 12 tickets that had at least 6 passengers sharing it
+names(table(titanic$ticket))[table(titanic$ticket) > 5]
+
+# names of the 86 passengers who shared the tickets:
+shareTix <- titanic[titanic$ticket %in% names(table(titanic$ticket))[table(titanic$ticket) > 5],]
+shareTix[order(shareTix$ticket),]$name
+```
+
+**3dv)** Passenger 784 and 785 had missing values for the variable `age`. The two passengers were both males that boarded the lower passenger class (`pclass`=3). The median age for all male passengers in the lower passenger class was 24 years old, and assign it to the two passengers' `age` values.
+```{r}
+# identify the passengers whose age were NA
+titanic[is.na(titanic$age),]
+
+# there were 493 male passengers in the lower class
+length((1:1309)[(titanic$pclass==3) & (titanic$sex=='male')]) 
+
+# calculate the median age for all male passengers in the lower class
+maleThird <- (1:1309)[(titanic$pclass==3) & (titanic$sex=='male')] 
+maleThirdPass <- titanic[maleThird[order(titanic$name[maleThird])], ]
+median(maleThirdPass$age,na.rm=T)
+
+# assign the 2 male passengers to be 24 years old
+titanic[784,]$age <- 24
+titanic[785,]$age <- 24 
+```
+
+**3dvi)** Passenger 118 boarded the lower passenger class and had missing value for the variable `fare`. The median fare of the corresponding class was 8.05 pounds, and assign it to the passenger's `fare` value.
+
+Identify the 1 fare that has NA value.
+```{r}
+# identify the passengers whose fare was NA
+titanic[is.na(titanic$fare),]
+
+# there were 709 passengers in the lower class
+length((1:1309)[titanic$pclass==3])
+
+# the median fare of the lower class tickets was 8.05 pounds
+thirdClassPass <- (1:1309)[titanic$pclass==3]
+thirdClassTix <- titanic[thirdClassPass[order(titanic$name[thirdClassPass])], ]
+median(thirdClassTix$fare,na.rm=T)
+
+# assign the median fare to the NA fare value
+titanic[118,]$fare <- 8.05
+```
+
+## Part 4: Logistic Regression
+Divide the data into training and test sets, then explore various logistic models.
+```{r}
+trainSet <- titanic[titanic$train == 1, ]
+testSet <- titanic[titanic$train == 0, ]
+```
+
+**4a)** Fit a logistic model `survived ~ sex + pclass` on the training data. The model's AIC value and BIC value are 834.89 and 854.06 respectively. The reference group in model 4(a) (ie. the intercept) is a female passenger that boarded the upper passenger class who had a 2.297 log-odds of survival ie. her survival odds was 9.944 ($e^{2.297}$), and her probability of survival was 0.909 (\(\frac{9.944}{1+9.944}\)). The `sexmale` coefficient represents the difference in log-odds survival ratio between the male and female passengers, hence the male passengers' log-odds of survival was -0.345 (2.297-2.642) ie. the survival odds of a male passenger was 0.708 ($e^{-0.345}$), and his probability of survival was 0.415 (\(\frac{0.708}{1+0.708}\)).
+
+The `pclass2` coefficient represents the difference in log-odds survival ratio between the upper and the middle passenger classes, hence the middle class passengers' log-odds of survival was 1.459 (2.297-0.838) ie. the survival odds of a middle class passenger was 4.302 ($e^{1.459}$), and the probability of survival was 0.811 (\(\frac{4.302}{1+4.302}\)). Likewise, the `pclass3` coefficient is the difference in log-odds survival ratio between the upper and the lower passenger classes, thus the lower class passengers' log-odds of survival was 0.392 (2.297-1.905) ie. the survival odds of a lower class passenger was 1.48 ($e^{0.392}$), and the probability of survival was 0.597 (\(\frac{1.48}{1+1.48}\)). 
+
+In this model, the female passengers that boarded the upper passenger class had the largest probability of survival. The prediction accuracy of this model is 76.32% (\(\frac{213+106}{418}\)).
+```{r}
+model4a <- glm(survived ~ sex + pclass, data = trainSet, family = binomial(link="logit"))
+model4a
+
+drop1(model4a,test="Chi")
+
+# AIC value
+extractAIC(model4a)
+# BIC value
+extractAIC(model4a, k=log(nrow(trainSet)))
+
+# summarize the prediction on the test data by a 2x2 table
+model4a.pred <- predict(model4a, newdata = testSet, type="response")
+model4a.pred <- as.numeric(model4a.pred > 0.5)
+table(model4a.pred, testSet[,2])
+
+# report the prediction accuracy of model 4a
+correctPred1 <- sum(model4a.pred == testSet[,2])
+accuracyPred1 <- correctPred1/dim(testSet)[1]
+accuracyPred1
+```
+
+**4b)** Fit a logistic model `survived ~ sex*pclass` on the training data. The model's AIC value and BIC value are 810.10 and 838.85 respectively. Model 4(a) is nested in model 4(b) and has a higher AIC value than 4(b). The reference group in model 4(b) is a female passenger that boarded the upper passenger class who had a log-odds of survival of 3.412 ie. her odds of survival was 30.326 ($e^{3.412}$) and her probability of survival was 0.968 (\(\frac{30.326}{1+30.326}\)). 
+
+Because there are interactions between the `sex` and `pclass` variables , the effects of both variables only represent the effects for the reference group. We need to include the interaction terms to get the effects for male passengers, hence the log-odds difference in survival between the male upper class passengers and male middle class passengers is -1.141 (-0.956-0.185), and between the male upper class passengers and male lower class passengers is -1.316 (-3.412+2.096). Furthermore, the difference in log-odds of survival between the male and female passengers is -3.949 in the upper passenger class, -4.134 (-3.949-0.185) in the middle passenger class, and -1.853 (-3.949+2.096) in the lower passenger class respectively. Accordingly, the difference in log-odds of survival between male and female passengers is considerably lower in the lower passenger class. 
+
+For males in the middle passenger class, their survival odds was 0.187 ($e^{3.412-3.949-1.141}$), and their probability of survival was 0.158 (\(\frac{0.187}{1+0.187}\)). For males in the lower passenger class, their survival odds was 0.157 ($e^{3.412-3.949-1.316}$), and their probability of survival was 0.136 (\(\frac{0.157}{1+0.157}\)). In this model, the female passengers that boarded the upper passenger class had the largest probability of survival. The prediction accuracy of this model is also 76.32% (\(\frac{213+106}{418}\)), and model 4(b) is preferred to model 4(a) because it has a smaller AIC value.
+
+```{r}
+model4b <- glm(survived ~ sex * pclass, data = trainSet, family = binomial(link="logit"))
+model4b
+
+drop1(model4b,test="Chi")
+
+# AIC value
+extractAIC(model4b)
+# BIC value
+extractAIC(model4b, k=log(nrow(trainSet)))
+
+# summarize the prediction on the test data by a 2x2 table
+model4b.pred <- predict(model4b, newdata = testSet, type="response")
+model4b.pred <- as.numeric(model4b.pred > 0.5)
+table(model4b.pred, testSet[,2]) 
+
+# report the prediction accuracy of model 4b
+correctPred2 <- sum(model4b.pred == testSet[,2])
+accuracyPred2 <- correctPred2/dim(testSet)[1]
+accuracyPred2
+```
+
+**4c)** Add `age` to model 4(b) and consider all interactions. The model 4(c)(1) `survived ~ sex*pclass*age` has a AIC value and BIC value of 780.48 and 837.99 respectively. The prediction accuracy of this model is 77.03% (\(\frac{226+96}{418}\)).
+
+```{r}
+model4c1 <- glm(survived ~ sex*pclass*age, data = trainSet, family = "binomial")
+model4c1
+
+# AIC value
+extractAIC(model4c1)
+# BIC value
+extractAIC(model4c1, k=log(nrow(trainSet)))
+
+# summarize the prediction on the test data by a 2x2 table
+model4c1.pred <- predict(model4c1, newdata = testSet, type="response")
+model4c1.pred <- as.numeric(model4c1.pred > 0.5)
+table(model4c1.pred, testSet[,2])
+
+# report the prediction accuracy of model 4c1
+correctPred3 <- sum(model4c1.pred == testSet[,2])
+accuracyPred3 <- correctPred3/dim(testSet)[1]
+accuracyPred3
+```
+
+The model 4(c)(2) `survived ~ sex + pclass + age + sex:pclass + sex:age + pclass:age` is selected after using stepwise selection. It has a AIC value and BIC value of 779.39 and 827.32 respectively. The prediction accuracy of this model is also 77.03% (\(\frac{227+95}{418}\)).
+```{r}
+model4c2 <- glm(survived ~ sex + pclass + age + sex:pclass + sex:age + pclass:age, data = trainSet, family="binomial")
+model4c2
+
+# AIC value
+extractAIC(model4c2)
+# BIC value
+extractAIC(model4c2, k=log(nrow(trainSet)))
+
+# summarize the prediction on the test data by a 2x2 table
+model4c2.pred <- predict(model4c2, newdata = testSet, type="response")
+model4c2.pred <- as.numeric(model4c2.pred > 0.5)
+table(model4c2.pred, testSet[,2])
+
+# report the prediction accuracy of model 4c2
+correctPred4 <- sum(model4c2.pred == testSet[,2])
+accuracyPred4 <- correctPred4/dim(testSet)[1]
+accuracyPred4
+```
+
+The model 4(c)(3) `survived ~ sex*pclass*log(age)` has a AIC value and BIC value of 762.71 and 820.22 respectively. The prediction accuracy of this model is 77.75% (\(\frac{238+87}{418}\)). Model 4(c)(3) has the highest accuracy among the three 4(c) models and the lowest AIC and BIC values.
+```{r}
+model4c3 <- glm(survived ~ sex*pclass*log(age),data = trainSet, family = "binomial")
+model4c3
+
+# AIC value
+extractAIC(model4c3)
+# BIC value
+extractAIC(model4c3, k=log(nrow(trainSet)))
+
+# summarize the prediction on the test data by a 2x2 table
+model4c3.pred <- predict(model4c3, newdata = testSet, type="response")
+model4c3.pred <- as.numeric(model4c3.pred > 0.5)
+table(model4c3.pred, testSet[,2])
+
+# report the prediction accuracy of model 4c3
+correctPred5 <- sum(model4c3.pred == testSet[,2])
+accuracyPred5 <- correctPred5/dim(testSet)[1]
+accuracyPred5
+```
+
+**4d)** Add `fare`, `embarked`, `sibsp`, and `parch` into model 4(c)(3). This model 4(d)(1) has a AIC value and BIC value of 736.70 and 822.96 respectively.
+```{r}
+model4d1 <- glm(survived ~ sex*pclass*log(age) + fare + embarked + sibsp + parch, data = trainSet, family="binomial")
+model4d1
+
+# AIC value
+extractAIC(model4d1)
+# BIC value
+extractAIC(model4d1, k=log(nrow(trainSet)))
+```
+
+After performing the step() with AIC criterion, we derive model 4(d)(2) `survived ~ sex + pclass + log(age) + embarked + sibsp + sex:pclass + sex:log(age) + pclass:log(age) + sex:pclass:log(age)`. The model has a AIC value and BIC value of 734.73 and 811.41 respectively. Its prediction accuracy is 78.71% (\(\frac{220+109}{418}\)).
+```{r}
+step(model4d1, k = 2)  
+```
+
+```{r}
+model4d2 <- glm(survived ~ sex + pclass + log(age) + embarked + sibsp + sex:pclass + sex:log(age) + pclass:log(age) + sex:pclass:log(age), 
+         data = trainSet, family="binomial")
+
+# AIC value
+extractAIC(model4d2)
+# BIC value
+extractAIC(model4d2, k=log(nrow(trainSet)))
+
+# summarize the prediction on the test data by a 2x2 table
+model4d2.pred <- predict(model4d2, newdata = testSet, type="response")
+model4d2.pred <- as.numeric(model4d2.pred > 0.5)
+table(model4d2.pred, testSet[,2])
+
+# report the prediction accuracy of model 4d2
+correctPred6 <- sum(model4d2.pred == testSet[,2])
+accuracyPred6 <- correctPred6/dim(testSet)[1]
+accuracyPred6
+```
+
+After performing the step() with BIC criterion, we derive model 4(d)(3) `survived ~ sex + pclass + log(age) + sibsp + sex:pclass + sex:log(age)`. The model has a AIC value and BIC value of 741.41 and 784.54 respectively. Its prediction accuracy is 77.51% (\(\frac{220+104}{418}\)). Model 4(d)(2) is preferred to 4(d)(3) because it has higer prediction accuracy.
+
+```{r}
+step(model4d1, k = log(nrow(trainSet)))
+```
+
+```{r}
+model4d3 <- glm(survived ~ sex + pclass + log(age) + sibsp + sex:pclass + sex:log(age), data = trainSet, family="binomial")
+model4d3
+
+# AIC value
+extractAIC(model4d3)
+# BIC value
+extractAIC(model4d3, k=log(nrow(trainSet)))
+
+# summarize the prediction on the test data by a 2x2 table
+model4d3.pred <- predict(model4d3, newdata = testSet, type="response")
+model4d3.pred <- as.numeric(model4d3.pred > 0.5)
+table(model4d3.pred, testSet[,2])
+
+# report the prediction accuracy of model 4d3
+correctPred7 <- sum(model4d3.pred == testSet[,2])
+accuracyPred7 <- correctPred7/dim(testSet)[1]
+accuracyPred7
+```
+
+**4e)** Among all the logistic models, model 4(d)(2) (ie. stepwise selection with AIC selection) has the smallest AIC value at 734.73 and the best prediction accuracy at 78.71%.
+```{r}
+AICSummary <- c(834.8884,810.0969,780.4776,779.3916,762.714,736.6964,734.7276,741.4095)
+names(AICSummary) <- c("4a","4b","4c1","4c2","4c3","4d1","4d2","4d3")
+sort(AICSummary)
+
+BICSummary <- c(854.0577,838.851,837.9857,827.315,820.2221,822.9586,811.4051,784.5406)
+names(BICSummary) <- c("4a","4b","4c1","4c2","4c3","4d1","4d2","4d3")
+sort(BICSummary)
+
+predAcc <- c(0.7631579,0.7631579,0.7703349,0.7703349,0.777512,0.7870813,0.7751196)
+names(predAcc) <- c("4a","4b","4c1","4c2","4c3","4d2","4d3")
+sort(predAcc)
+```
+
+## Part 5: Tree Models
+Divide the data into training and test, then explore various tree models with all the variables except `Life_boat`, `name`, `ticket` and `cabin`.
+
+```{r}
+library(rpart)
+drops=c("Life_boat", "name", "ticket", "cabin")
+trainSet = trainSet[, !names(trainSet) %in% drops]
+testSet = testSet[, !names(testSet) %in% drops]
+```
+
+**5a)** After fitting a classification tree model with the initial control parameters `minsplit = 5, cp = 0.000001, maxdepth = 30, method = "class"`, the selected cp value that has the minimum cross-validation estimate of misclassification error (`xerror`) is 0.007797271, where the optimal `nsplit` is 6.
+```{r}
+# Tree model 1
+tree1 <- rpart(survived ~ ., data = trainSet, minsplit = 5, cp = 0.000001, maxdepth = 30, method = "class")
+plotcp(tree1)
+
+tree1$cptable[which.min(tree1$cptable[,"xerror"]),"CP"]
+```
+
+```{r}
+# Tree model 2, updated cp value
+tree2 <- rpart(survived ~ ., data = trainSet, minsplit = 5, cp = 0.001949318, method = "class")
+plotcp(tree2)
+
+tree2$cptable[which.min(tree2$cptable[,"xerror"]),"CP"]
+```
+
+```{r}
+# Tree model 3, updated cp value
+tree3 <- rpart(survived ~ ., data = trainSet, minsplit = 5, cp = 0.003898635)
+plotcp(tree3)
+
+tree3$cptable[which.min(tree3$cptable[,"xerror"]),"CP"]
+```
+
+According to the tree plot: 
+
+1. 342 passengers survived the wreck and 549 passengers did not. 
+2. Among the 577 male passengers, 109 survived and 468 did not. This suggests that males had lower priorities than the females to board the lifeboats and hence less likely to survive the sinkage.
+3. 450 of the 468 dead male passengers were at least 12.5 years old, and the other 18 dead male passengers were younger than 12.5 years old. Among the 109 survived male passengers, 86 of them were at least 12.5 years old, and 23 of them were younger than 12.5 years old. This suggests that among the males, children had higher priorities than the adult men to board the lifeboats and to be rescued.
+4. None of the 536 male passengers that were at least 12.5 years old had 2.5 or more siblings/spouses aboard the Titanic. Among the 41 male passengers that were younger than 12.5 years old, 1 passengers had 2.5 or more siblings/spouses and survived, while the other 17 such passengers died. On the other hand, 22 male passengers had fewer than 2.5 siblings/spouses and survived, but 1 such passenger died. This suggests that children with fewer siblings on board of Titanic were more likely to receive attention and to be rescued than children that had more siblings on board.
+5. Among the 314 female passengers, 233 survived and 81 did not. 161 female passengers that survived were in the upper or middle passenger class, while the other 72 female passengers that survived were in the lower passenger class. This indicates that the women that boarded the upper or middle class were more likely to get out of the ship because they were less crowded, as well as receiving better attention for rescue. 
+6. Among the 72 female passengers that boarded the lower passenger class and survived sinkage, 69 had ticket fare that cost less than 23.35 pounds. Among these 69 female passengers, 1 was at 39.5 years old while the other 68 were younger than 39.5 years old. This indicates that the younger female passengers were less feeble and prbobly had fewer children to tend to, hence more likely to escape from the wreck.
+
+The prediction accuracy of the generated tree model is 77.99% (\(\frac{216+110}{418}\))
+```{r, fig.height=8, fig.width=8}
+treePlot <- prune.rpart(tree3, 0.0078)
+plot(treePlot, compress = T, uniform = T, branch = 0.5, margin = 0.05)
+text(treePlot, cex = 0.8, font = 2, use.n = T, all = T)
+
+# summarize the prediction on the test data by a 2x2 table
+predTreePlot <- predict(treePlot, newdata = testSet,"class")
+table(predTreePlot, testSet[,1])
+
+# the accuracy of the tree model prediction
+correctTreePlot = sum(predTreePlot == testSet[,1])
+accuracyTreePlot = correctTreePlot/dim(testSet)[1]
+accuracyTreePlot
+```
+
+**5b)** After fitting a random forest model with 500 generated trees, the random forest model achieves lower prediction accuracy than the single tree model.
+```{r, fig.height=8, fig.width=8}
+library(randomForest)
+modelForest <- randomForest(survived ~ ., data = trainSet, proximity = T, importance = TRUE, ntrees = 500, method = "class")
+
+# summarize the prediction on the test data by a 2x2 table
+predForest <- predict(modelForest, newdata = testSet,"class")
+table(predForest, testSet$survived)
+
+# the accuracy of the random forest model prediction
+correctForest = sum(predForest == testSet[,1])
+accuracyForest = correctForest/dim(testSet)[1]
+accuracyForest
+```
