@@ -1,4 +1,4 @@
-The original data is available from Kaggle [here](http://www.kaggle.com/c/titanic-gettingStarted/data). The RPub link is [here](http://rpubs.com/shngli/93031).
+The original data is available from Kaggle [here](http://www.kaggle.com/c/titanic-gettingStarted/data). The RPubs link is [here](http://rpubs.com/shngli/93031).
 
 Description of the dataset variables:
 
