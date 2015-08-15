@@ -1,0 +1,274 @@
+---
+title: "What are consumers tweeting about my brand?"
+author: "Chisheng Li"
+output: html_document
+---
+
+### Introduction
+This project examines the tweets about seven popular consumer brands: Disney, McDonalds, Microsoft, Nintendo, Samsung, Sony and Starbucks. It analyzes the trends of the users that tweeted these brands online, and the content associated with each brand.
+
+### Methodology
+559666 tweets containing at least one of the keywords "Disney," "McDonalds," "Microsoft," "Nintendo," "Samsung," "Sony" and "Starbucks" were downloaded from a Python API between August 6 2015 and August 8 2015. The raw tweets were subsequently converted from JSON to CSV format through Python, retaining only 10 selected fields such as the text, Twitter username, language, location and the number of followers. 
+
+Next, a multi-step data manipulation was conducted in R to process the csv file. Tweets that contained more than one keyword in their text were removed from the data frame, leaving 556519 tweets in the data set. Because there were 86248 different locations in the original data set, majority tweets were manually relabeled using regular expression and assigned to a country based on their city or state. Many tweets did not disclose the users' location in the original data set, and ambiguous locations that did not include a country, state or city were relabeled with an empty field, such as "Worldwide," "Everywhere" or "Your Phone." As a result, 232118 tweets have an empty location field. 
+
+396207 tweets in the English language were subsetted to a different data frame. In the first treatment, the tweets were tagged with positive and/or negative sentiments according to dictionaries adapted from the [Harvard General Inquirer](http://www.wjh.harvard.edu/~inquirer/). Tweets that were not tagged with any sentiment were labeled as neutral. Tweets that contained both positive and negative sentiments in the same text were removed, leaving 170625 tweets for sentiment analysis. In the second treatment, the English tweets were subsetted into their respective brand, and converted into [term document matrices](http://www.williamwebber.com/research/teaching/comp90042/2014s1/lect/l02.pdf) after removing stop words and numbers from their text.The term document matrices for all seven brands were saved for text mining.
+
+### Trend Analysis
+Disney is the most tweeted brand, followed by Samsung, Microsoft and Sony. These four brands make up 78% of the Twitter buzz. This is unsurprising because Disney, Samsung and Sony all have wide product and media service offerings, while [Microsoft released Windows 10](https://blogs.windows.com/bloggingwindows/2015/06/01/hello-world-windows-10-available-on-july-29/), its new operating system, just a week before the tweets were collected. On the other hand, McDonald's is the least tweeted brand, consisted only half the tweets of its coffee rival Starbucks. This is not unexpected because McDonald's has been reported on [multiple](http://www.businessinsider.com/mcdonalds-twitter-campaign-goes-horribly-wrong-mcdstories-2012-1) [occassions](http://www.forbes.com/sites/caroltice/2014/10/30/why-ronald-mcdonald-failed-on-twitter-branding-lessons/) for its failed Twitter campaigns. It is also possible that consumers tweet about its products, such as the McNuggets or the Big Mac, without directly mentioning the brand.
+
+```{r, echo=FALSE, message=FALSE}
+library(data.table)
+library(ggplot2)
+library(tm)
+library(slam)
+library(graph)
+library(Rgraphviz)
+library(wordcloud)
+
+load("tweets.Rda")
+load("tweets_eng.Rda")
+load("disnTDM.Rda")
+load("smsgTDM.Rda")
+load("msftTDM.Rda")
+load("sonyTDM.Rda")
+load("sbckTDM.Rda")
+load("ntdoTDM.Rda")
+load("mcdnTDM.Rda")
+```
+
+```{r, fig.height=6, fig.width=12, echo=FALSE, message=FALSE}
+ggplot(data = tweets, aes(x = brand, fill = brand)) + geom_bar(width = 0.9) + stat_bin(aes(label = sprintf("%.02f%%", ..count../sum(..count..)*100)), geom = 'text', vjust = -0.15, size = 4) + ggtitle("Number of tweets by brands") + labs(x = "Brand", y = "Number of tweets", fill = guide_legend(title = "Brand"))
+```
+
+Majority tweets originated from the United States, where they are evenly distributed among Disney, Samsung, Microsoft and Sony. Among the top 10 non-US countries, Disney is the most tweeted brand in the United Kingdom, Brazil, Canada, Mexico and Argentina. Nintendo receive significant mentions only in Japan, its native country, and the United Kingdom. Samsung is the dominant brand in Indonesia, where the company has [recently invested new manufacturing operations](http://www.bloombergview.com/articles/2015-05-20/samsung-s-future-runs-through-indonesia). Majority tweets in Russia are about the electronic brands, while Starbucks has notable mentions only in the United Kingdom, Canada and Mexico.
+
+```{r, fig.height=6, fig.width=12, echo=FALSE}
+country <- subset(tweets, locations == "United States" | locations == "United Kingdom" | locations == "Japan" | locations == "Indonesia" | locations == "Russia" | locations == "Brazil" | locations == "Canada" | locations == "Spain" | locations == "France" | locations == "Mexico")
+country <- droplevels(country)
+
+# Sort the locations by decreasing order
+country <- within(country, locations <- factor(locations, levels = names(sort(table(locations), decreasing = T))))
+
+ggplot(data = country, aes(x = locations, fill = brand)) + geom_bar(width = 0.9) + ggtitle("Proportion of brands in the top 10 countries") + labs(x = "Country", y = "Proportion of tweets", fill = guide_legend(title = "Brand"))
+```
+
+```{r, fig.height=6, fig.width=12, echo=FALSE}
+country_others <- subset(tweets, locations == "United Kingdom" | locations == "Japan" | locations == "Indonesia" | locations == "Russia" | locations == "Brazil" | locations == "Canada" | locations == "Spain" | locations == "France" | locations == "Mexico" | locations == "Argentina" )
+country_others <- droplevels(country_others)
+
+# Sort the locations by decreasing order
+country_others <- within(country_others, locations <- factor(locations, levels = names(sort(table(locations), decreasing = T))))
+
+ggplot(data = country_others, aes(x = locations, fill = brand)) + geom_bar(width = 0.9) + ggtitle("Proportion of brands in the top 10 non-US countries") + labs(x = "Country", y = "Proportion of tweets", fill = guide_legend(title = "Brand"))
+```
+
+Brand sentiment analysis reveals that Disney has a 1:1 ratio of positive to negative tweets. Microsoft, Starbucks and Nintendo have higher proportion of positive tweets than negative tweets, with the latter achieving a 2:1 positive-to-negative ratio. On the other hand, Samsung, Sony and McDonald's have higher proportion of negative tweets than positive tweets. In particular, despite Samsung's popularity, the brand has nearly twice as many negative mentions than positive mentions on Twitter.
+
+```{r, fig.height=7, fig.width=11, echo=FALSE, message=FALSE}
+# Calculate the proportion of each sentiment for every brand among English tweets
+sent <- as.data.frame(table(tweets_eng$brand, tweets_eng$sentiment))
+sent <- merge(sent, as.data.frame(table(tweets_eng$brand)), by = "Var1", all.x = T)
+names(sent) <- c('brand', 'sentiment', 'freq', 'count')
+
+ggplot(data = tweets_eng, aes(x = brand, fill = factor(sentiment))) + geom_bar(position = 'dodge') + ggtitle("Proportion of sentiments by brands") +  labs(x = "Brands", y = "Number of English tweets", fill=guide_legend(title="Sentiment")) + geom_text(data = sent, aes(x = brand, y = freq, label = sprintf("%.02f%%", freq/count*100)), position = position_dodge(width = 1), vjust=-0.3, size = 3)
+```
+
+Examination of how the brand sentiments distribute across the globe shows that the United States, the United Kingdom, India, Japan and Mexico have higher proportion of negative tweets than positive tweets. Nigeria and France are the only two nations that have significant proportions of positive tweets.
+
+```{r, fig.height=7, fig.width=13, echo=FALSE, message=FALSE}
+ten_eng <- subset(tweets_eng, locations == "United States" | locations == "United Kingdom" | locations == "Canada" | locations == "India" | locations == "Nigeria" | locations == "France" | locations == "Australia" | locations == "Japan" | locations == "Indonesia" | locations == "Mexico")
+ten_eng <- droplevels(ten_eng)
+
+# Sort the locations by decreasing order
+ten_eng <- within(ten_eng, locations <- factor(locations, levels = names(sort(table(locations), decreasing = T))))
+
+# Calculate the proportion of each sentiment for every country
+ten_sent <- as.data.frame(table(ten_eng$locations, ten_eng$sentiment))
+ten_sent <- merge(ten_sent, as.data.frame(table(ten_eng$locations)), by = "Var1", all.x = T)
+names(ten_sent) <- c('locations', 'sentiment', 'freq', 'count')
+
+ggplot(data = ten_eng, aes(x = locations, fill = factor(sentiment))) + geom_bar(position = 'dodge') + ggtitle("Proportion of brand sentiments in the top 10 countries") +  labs(x = "Locations", y = "Number of English tweets", fill=guide_legend(title="Sentiment")) + geom_text(data = ten_sent, aes(x = locations, y = freq, label = sprintf("%.02f%%", freq/count*100)), position = position_dodge(width = 1), vjust=-0.3, size = 3)
+```
+
+Among the seven brands, Disney has the largest distribution of Twitter followers and friends. The 50th to 75th percentile users appear to be very well connected, and the median user has about 450 followers, and follows about 450 users. In other words, users that tweeted Disney tend to have more followers and followed more people on Twitter than users that tweeted other brands. However, users that tweeted the electronic brands all have significantly higher total tweet counts than those who tweeted Disney, Starbucks and McDonalds. In particular, the 75th percentile users of those four brands have about 150000 total tweet counts each. It is possible that there are many [spambots](http://www.digitaltrends.com/social-media/can-you-buy-twitter-legitimacy-a-look-inside-the-fake-follower-business/) on Twitter promoting the products and services of electronic companies, thereby inflating their tweet counts. Users that tweeted Starbucks and McDonalds have similar distribution and much lower number of total tweet counts, suggesting that majority of them are real people.
+
+```{r, fig.height=8, fig.width=22, echo=FALSE, message=FALSE}
+require(gridExtra)
+
+followers_plot <- ggplot(data = tweets, aes(x = brand, y = followers, fill = brand)) + geom_boxplot() + coord_cartesian(ylim = c(0, 3000)) + labs(x = "Brands", y = "Number of Twitter followers") + ggtitle("Number of Twitter followers by brand") + theme(legend.position="none", plot.title=element_text(size=20))
+
+friends_plot <- ggplot(data = tweets, aes(x = brand, y = friends, fill = brand)) + geom_boxplot() + coord_cartesian(ylim = c(0, 2250)) + labs(x = "Brands", y = "Number of people followed") + ggtitle("Number of Twitter friends by brand") + theme(legend.position="none", plot.title=element_text(size=20))
+
+status_plot <- ggplot(data = tweets, aes(x = brand, y = statuses, fill = brand)) + geom_boxplot() + coord_cartesian(ylim = c(0, 200000)) + labs(x = "Brands", y = "Total user tweet counts") + ggtitle("Users' total tweet counts by brand") + theme(legend.position="none", plot.title=element_text(size=20))
+
+grid.arrange(followers_plot, friends_plot, status_plot, ncol=3)
+```
+
+Comparison of the users reveal that even the outliers have significantly higher number of followers than number of friends. A large number of users have more than 500000 total tweet counts and tend to tweet about the electronic brands, but they have few Twitter followers or friends. By contrast, users that boast high number of followers (1.5 millions or greater) or high number of friends (125000 or greater) are diverse in the brands that they tweeted, and generally have fewer than 500000 total tweet counts.
+
+```{r, fig.height=6, fig.width=12, echo=FALSE}
+ggplot(data = tweets, aes(x = friends, y = followers, colour = brand)) + geom_point(size = 2, alpha = 0.7) + labs(x = "Number of friends", y = "Number of followers", colour=guide_legend(title = "Brands")) + ggtitle("Twitter users' number of followers vs number of friends")
+
+ggplot(data = tweets, aes(x = followers, y = statuses, colour = brand)) + geom_point(size = 2, alpha = 0.7) + labs(x = "Number of followers", y = "Total tweet counts", colour=guide_legend(title="Brands")) + ggtitle("Twitter users' total tweet counts vs number of followers")
+
+ggplot(data = tweets, aes(x = friends, y = statuses, colour = brand)) + geom_point(size = 2, alpha = 0.7) + labs(x = "Number of friends", y = "Total tweet counts", colour=guide_legend(title="Brands")) + ggtitle("Twitter users' total tweet counts vs number of friends")
+```
+
+User and tweet that has the highest number of followers:
+```{r, echo=FALSE}
+max_followers <- tweets[followers == max(tweets$followers)]
+max_followers
+```
+
+User and tweet that has the highest number of friends:
+```{r, echo=FALSE}
+max_friends <- tweets[friends == max(tweets$friends)]
+max_friends
+```
+
+User and tweet that has the highest total tweet counts:
+```{r, echo=FALSE}
+max_tweets <- tweets[statuses == max(tweets$statuses)]
+max_tweets
+```
+
+### Text mining
+Word networks of each brand reveal how the frequent terms are associated together among the tweets. It is apparent to see terms within the network clusters that are unique to the brands' products or services. For example, Sony has a cluster of words about its music service, the English band One Direction and their newest hit song [Drag Me Down](https://en.wikipedia.org/wiki/Drag_Me_Down), and another cluster about its Playstation console system. Likewise, Microsoft has a network cluster about its Xbox console system, a cluster about its tablet Surface Pro, and another cluster about its Windows operating system. Interestingly, McDonald's word network does not show its food or beverage products. Instead, it has a significant cluster  from the tweet that was possibly retweeted by multiple users: "the founding fathers, who all barely washed their [profanity], wanted me to have an assault rifle in this mcdonalds." This further suggests that McDonalds' consumers do not mention its brand name when they tweet about its burgers, fries and drinks.
+
+```{r, echo=FALSE}
+# Find words that appear at least 1000 times with Disney
+disnTerms <- findFreqTerms(disnTDM, lowfreq = 3500)
+# Find words that appear at least 800 times with Samsung
+smsgTerms <- findFreqTerms(smsgTDM, lowfreq = 4000)
+# Find words that appear at least 800 times with Microsoft
+msftTerms <- findFreqTerms(msftTDM, lowfreq = 3500)
+# Find words that appear at least 800 times with Sony
+sonyTerms <- findFreqTerms(sonyTDM, lowfreq = 3500)
+# Find words that appear at least 800 times with Starbucks
+sbckTerms <- findFreqTerms(sbckTDM, lowfreq = 1100)
+# Find words that appear at least 800 times with Nintendo
+ntdoTerms <- findFreqTerms(ntdoTDM, lowfreq = 1200)
+# Find words that appear at least 800 times with McDonalds
+mcdnTerms <- findFreqTerms(mcdnTDM, lowfreq = 800)
+```
+
+```{r, fig.height=30, fig.width=20, echo=FALSE}
+par(mfrow=c(4,2))
+plot(disnTDM, term = disnTerms, corThreshold = 0.05, main = "Disney word network", cex.main=3)
+plot(smsgTDM, term = smsgTerms, corThreshold = 0.2, main = "Samsung word network", cex.main=3)
+plot(msftTDM, term = msftTerms, corThreshold = 0.2, main = "Microsoft word network", cex.main=3)
+plot(sonyTDM, term = sonyTerms, corThreshold = 0.2, main = "Sony word network", cex.main=3)
+plot(sbckTDM, term = sbckTerms, corThreshold = 0.05, main = "Starbucks word network", cex.main=3)
+plot(ntdoTDM, term = ntdoTerms, corThreshold = 0.2, main = "Nintendo word network", cex.main=3)
+plot(mcdnTDM, term = mcdnTerms, corThreshold = 0.2, main = "McDonalds word network", cex.main=3)
+```
+
+Hierarchical clustering of the frequent terms show similar clusters to the word networks above. In particular, the clusters containing 'ebay,' 'full' and 'read' commonly appear in Samsung, Microsoft, Sony and Nintendo's dendrograms. It is likely that many tweets associated with these four brands were about selling or trading their electronic products, because consumers that sell their items on eBay typically insert ["Full read by eBay"](https://twitter.com/veeryo__woimhi/status/599689698458673152) in their tweets. 
+
+```{r, echo=FALSE}
+# Cluster Disney terms
+disnTDM2 <- removeSparseTerms(disnTDM, sparse = 0.96)
+disnM <- as.matrix(disnTDM2)
+disnMatrix <- dist(scale(disnM))
+disnFit <- hclust(disnMatrix, method = "ward.D2")
+
+# Cluster Samsung terms
+smsgTDM2 <- removeSparseTerms(smsgTDM, sparse = 0.93)
+smsgM <- as.matrix(smsgTDM2)
+smsgMatrix <- dist(scale(smsgM))
+smsgFit <- hclust(smsgMatrix, method = "ward.D2")
+
+# Cluster Microsoft terms
+msftTDM2 <- removeSparseTerms(msftTDM, sparse = 0.93)
+msftM <- as.matrix(msftTDM2)
+msftMatrix <- dist(scale(msftM))
+msftFit <- hclust(msftMatrix, method = "ward.D2")
+
+# Cluster Sony terms
+sonyTDM2 <- removeSparseTerms(sonyTDM, sparse = 0.93)
+sonyM <- as.matrix(sonyTDM2)
+sonyMatrix <- dist(scale(sonyM))
+sonyFit <- hclust(sonyMatrix, method = "ward.D2")
+
+# Cluster Starbucks terms
+sbckTDM2 <- removeSparseTerms(sbckTDM, sparse = 0.97)
+sbckM <- as.matrix(sbckTDM2)
+sbckMatrix <- dist(scale(sbckM))
+sbckFit <- hclust(sbckMatrix, method = "ward.D2")
+
+# Cluster Nintendo terms
+ntdoTDM2 <- removeSparseTerms(ntdoTDM, sparse = 0.92)
+ntdoM <- as.matrix(ntdoTDM2)
+ntdoMatrix <- dist(scale(ntdoM))
+ntdoFit <- hclust(ntdoMatrix, method = "ward.D2")
+
+# Cluster McDonalds terms
+mcdnTDM2 <- removeSparseTerms(mcdnTDM, sparse = 0.92)
+mcdnM <- as.matrix(mcdnTDM2)
+mcdnMatrix <- dist(scale(mcdnM))
+mcdnFit <- hclust(mcdnMatrix, method = "ward.D2")
+```
+
+```{r, fig.height=20, fig.width=10, echo=FALSE}
+par(mfrow=c(4,2))
+# 1) Disney
+plot(disnFit, main = "Disney Cluster Dendrogram")
+rect.hclust(disnFit, k=6)
+# 2) Samsung
+plot(smsgFit, main = "Samsung Cluster Dendrogram")
+rect.hclust(smsgFit, k=8)
+# 3) Microsoft
+plot(msftFit, main = "Microsoft Cluster Dendrogram")
+rect.hclust(msftFit, k=6)
+# 4) Sony
+plot(sonyFit, main = "Sony Cluster Dendrogram")
+rect.hclust(sonyFit, k=6)
+# 5) Starbucks
+plot(sbckFit, main = "Starbucks Cluster Dendrogram")
+rect.hclust(sbckFit, k=6)
+# 6) Nintendo
+plot(ntdoFit, main = "Nintendo Cluster Dendrogram")
+rect.hclust(ntdoFit, k=6)
+# 7) McDonalds
+plot(mcdnFit, main = "McDonalds Cluster Dendrogram")
+rect.hclust(mcdnFit, k=6)
+```
+
+### Brand Word Clouds
+The following are word clouds created from frequently used terms that are associated with each brand:
+
+```{r, echo=FALSE}
+# Calculate and sort Disney word frequency
+disnFreq <- row_sums(disnTDM, na.rm=T)
+disnWord <- sort(disnFreq, decreasing = T)
+# Calculate and sort Samsung word frequency
+smsgFreq <- row_sums(smsgTDM, na.rm=T)
+smsgWord <- sort(smsgFreq, decreasing = T)
+# Calculate and sort Microsoft word frequency
+msftFreq <- row_sums(msftTDM, na.rm=T)
+msftWord <- sort(msftFreq, decreasing = T)
+# Calculate and sort Sony word frequency
+sonyFreq <- row_sums(sonyTDM, na.rm=T)
+sonyWord <- sort(sonyFreq, decreasing = T)
+# Calculate and sort Starbucks word frequency
+sbckFreq <- row_sums(sbckTDM, na.rm=T)
+sbckWord <- sort(sbckFreq, decreasing = T)
+# Calculate and sort Nintendo word frequency
+ntdoFreq <- row_sums(ntdoTDM, na.rm=T)
+ntdoWord <- sort(ntdoFreq, decreasing = T)
+# Calculate and sort McDonalds word frequency
+mcdnFreq <- row_sums(mcdnTDM, na.rm=T)
+mcdnWord <- sort(mcdnFreq, decreasing = T)
+```
+
+```{r, echo=FALSE}
+pal <- brewer.pal(8, "Dark2")
+wordcloud(words = names(disnWord), freq = disnWord, min.freq = 500, random.order = F, colors = pal)
+wordcloud(words = names(smsgWord), freq = smsgWord, min.freq = 400, random.order = F, colors = pal)
+wordcloud(words = names(msftWord), freq = msftWord, min.freq = 300, random.order = F, colors = pal)
+wordcloud(words = names(sonyWord), freq = sonyWord, min.freq = 300, random.order = F, colors = pal)
+wordcloud(words = names(sbckWord), freq = sbckWord, min.freq = 200, random.order = F, colors = pal)
+wordcloud(words = names(ntdoWord), freq = ntdoWord, min.freq = 150, random.order = F, colors = pal)
+wordcloud(words = names(mcdnWord), freq = mcdnWord, min.freq = 80, random.order = F, colors = pal)
+```
