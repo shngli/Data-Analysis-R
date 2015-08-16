@@ -38,29 +38,43 @@ load("mcdnTDM.Rda")
 ```
 
 ```{r, fig.height=6, fig.width=12, echo=FALSE, message=FALSE}
-ggplot(data = tweets, aes(x = brand, fill = brand)) + geom_bar(width = 0.9) + stat_bin(aes(label = sprintf("%.02f%%", ..count../sum(..count..)*100)), geom = 'text', vjust = -0.15, size = 4) + ggtitle("Number of tweets by brands") + labs(x = "Brand", y = "Number of tweets", fill = guide_legend(title = "Brand"))
+ggplot(data = tweets, aes(x = brand, fill = brand)) + geom_bar(width = 0.9) + 
+  stat_bin(aes(label = sprintf("%.02f%%", ..count../sum(..count..)*100)), geom = 'text', vjust = -0.15, size = 4) + 
+  ggtitle("Number of tweets by brands") + 
+  labs(x = "Brand", y = "Number of tweets", fill = guide_legend(title = "Brand"))
 ```
 
 Majority tweets originated from the United States, where they are evenly distributed among Disney, Samsung, Microsoft and Sony. Among the top 10 non-US countries, Disney is the most tweeted brand in the United Kingdom, Brazil, Canada, Mexico and Argentina. Nintendo receive significant mentions only in Japan, its native country, and the United Kingdom. Samsung is the dominant brand in Indonesia, where the company has [recently invested new manufacturing operations](http://www.bloombergview.com/articles/2015-05-20/samsung-s-future-runs-through-indonesia). Majority tweets in Russia are about the electronic brands, while Starbucks has notable mentions only in the United Kingdom, Canada and Mexico.
 
 ```{r, fig.height=6, fig.width=12, echo=FALSE}
-country <- subset(tweets, locations == "United States" | locations == "United Kingdom" | locations == "Japan" | locations == "Indonesia" | locations == "Russia" | locations == "Brazil" | locations == "Canada" | locations == "Spain" | locations == "France" | locations == "Mexico")
+country <- subset(tweets, locations == "United States" | locations == "United Kingdom" | locations == "Japan" | 
+                    locations == "Indonesia" | locations == "Russia" | locations == "Brazil" | 
+                    locations == "Canada" | locations == "Spain" | locations == "France" | 
+                    locations == "Mexico")
 country <- droplevels(country)
 
 # Sort the locations by decreasing order
 country <- within(country, locations <- factor(locations, levels = names(sort(table(locations), decreasing = T))))
 
-ggplot(data = country, aes(x = locations, fill = brand)) + geom_bar(width = 0.9) + ggtitle("Proportion of brands in the top 10 countries") + labs(x = "Country", y = "Proportion of tweets", fill = guide_legend(title = "Brand"))
+ggplot(data = country, aes(x = locations, fill = brand)) + geom_bar(width = 0.9) + 
+  ggtitle("Proportion of brands in the top 10 countries") + 
+  labs(x = "Country", y = "Proportion of tweets", fill = guide_legend(title = "Brand"))
 ```
 
 ```{r, fig.height=6, fig.width=12, echo=FALSE}
-country_others <- subset(tweets, locations == "United Kingdom" | locations == "Japan" | locations == "Indonesia" | locations == "Russia" | locations == "Brazil" | locations == "Canada" | locations == "Spain" | locations == "France" | locations == "Mexico" | locations == "Argentina" )
+country_others <- subset(tweets, locations == "United Kingdom" | locations == "Japan" | locations == "Indonesia" | 
+                           locations == "Russia" | locations == "Brazil" | locations == "Canada" | 
+                           locations == "Spain" | locations == "France" | locations == "Mexico" | 
+                           locations == "Argentina" )
 country_others <- droplevels(country_others)
 
 # Sort the locations by decreasing order
-country_others <- within(country_others, locations <- factor(locations, levels = names(sort(table(locations), decreasing = T))))
+country_others <- within(country_others, 
+                         locations <- factor(locations, levels = names(sort(table(locations), decreasing = T))))
 
-ggplot(data = country_others, aes(x = locations, fill = brand)) + geom_bar(width = 0.9) + ggtitle("Proportion of brands in the top 10 non-US countries") + labs(x = "Country", y = "Proportion of tweets", fill = guide_legend(title = "Brand"))
+ggplot(data = country_others, aes(x = locations, fill = brand)) + geom_bar(width = 0.9) + 
+  ggtitle("Proportion of brands in the top 10 non-US countries") + 
+  labs(x = "Country", y = "Proportion of tweets", fill = guide_legend(title = "Brand"))
 ```
 
 Brand sentiment analysis reveals that Disney has a 1:1 ratio of positive to negative tweets. Microsoft, Starbucks and Nintendo have higher proportion of positive tweets than negative tweets, with the latter achieving a 2:1 positive-to-negative ratio. On the other hand, Samsung, Sony and McDonald's have higher proportion of negative tweets than positive tweets. In particular, despite Samsung's popularity, the brand has nearly twice as many negative mentions than positive mentions on Twitter.
@@ -71,13 +85,20 @@ sent <- as.data.frame(table(tweets_eng$brand, tweets_eng$sentiment))
 sent <- merge(sent, as.data.frame(table(tweets_eng$brand)), by = "Var1", all.x = T)
 names(sent) <- c('brand', 'sentiment', 'freq', 'count')
 
-ggplot(data = tweets_eng, aes(x = brand, fill = factor(sentiment))) + geom_bar(position = 'dodge') + ggtitle("Proportion of sentiments by brands") +  labs(x = "Brands", y = "Number of English tweets", fill=guide_legend(title="Sentiment")) + geom_text(data = sent, aes(x = brand, y = freq, label = sprintf("%.02f%%", freq/count*100)), position = position_dodge(width = 1), vjust=-0.3, size = 3)
+ggplot(data = tweets_eng, aes(x = brand, fill = factor(sentiment))) + geom_bar(position = 'dodge') + 
+  ggtitle("Proportion of sentiments by brands") +  
+  labs(x = "Brands", y = "Number of English tweets", fill=guide_legend(title="Sentiment")) + 
+  geom_text(data = sent, aes(x = brand, y = freq, label = sprintf("%.02f%%", freq/count*100)), 
+            position = position_dodge(width = 1), vjust=-0.3, size = 3)
 ```
 
 Examination of how the brand sentiments distribute across the globe shows that the United States, the United Kingdom, India, Japan and Mexico have higher proportion of negative tweets than positive tweets. Nigeria and France are the only two nations that have significant proportions of positive tweets.
 
 ```{r, fig.height=7, fig.width=13, echo=FALSE, message=FALSE}
-ten_eng <- subset(tweets_eng, locations == "United States" | locations == "United Kingdom" | locations == "Canada" | locations == "India" | locations == "Nigeria" | locations == "France" | locations == "Australia" | locations == "Japan" | locations == "Indonesia" | locations == "Mexico")
+ten_eng <- subset(tweets_eng, locations == "United States" | locations == "United Kingdom" | 
+                    locations == "Canada" | locations == "India" | locations == "Nigeria" | 
+                    locations == "France" | locations == "Australia" | locations == "Japan" | 
+                    locations == "Indonesia" | locations == "Mexico")
 ten_eng <- droplevels(ten_eng)
 
 # Sort the locations by decreasing order
@@ -88,7 +109,11 @@ ten_sent <- as.data.frame(table(ten_eng$locations, ten_eng$sentiment))
 ten_sent <- merge(ten_sent, as.data.frame(table(ten_eng$locations)), by = "Var1", all.x = T)
 names(ten_sent) <- c('locations', 'sentiment', 'freq', 'count')
 
-ggplot(data = ten_eng, aes(x = locations, fill = factor(sentiment))) + geom_bar(position = 'dodge') + ggtitle("Proportion of brand sentiments in the top 10 countries") +  labs(x = "Locations", y = "Number of English tweets", fill=guide_legend(title="Sentiment")) + geom_text(data = ten_sent, aes(x = locations, y = freq, label = sprintf("%.02f%%", freq/count*100)), position = position_dodge(width = 1), vjust=-0.3, size = 3)
+ggplot(data = ten_eng, aes(x = locations, fill = factor(sentiment))) + geom_bar(position = 'dodge') + 
+  ggtitle("Proportion of brand sentiments in the top 10 countries") +  
+  labs(x = "Locations", y = "Number of English tweets", fill=guide_legend(title="Sentiment")) + 
+  geom_text(data = ten_sent, aes(x = locations, y = freq, label = sprintf("%.02f%%", freq/count*100)), 
+            position = position_dodge(width = 1), vjust=-0.3, size = 3)
 ```
 
 Among the seven brands, Disney has the largest distribution of Twitter followers and friends. The 50th to 75th percentile users appear to be very well connected, and the median user has about 450 followers, and follows about 450 users. In other words, users that tweeted Disney tend to have more followers and followed more people on Twitter than users that tweeted other brands. However, users that tweeted the electronic brands all have significantly higher total tweet counts than those who tweeted Disney, Starbucks and McDonalds. In particular, the 75th percentile users of those four brands have about 150000 total tweet counts each. It is possible that there are many [spambots](http://www.digitaltrends.com/social-media/can-you-buy-twitter-legitimacy-a-look-inside-the-fake-follower-business/) on Twitter promoting the products and services of electronic companies, thereby inflating their tweet counts. Users that tweeted Starbucks and McDonalds have similar distribution and much lower number of total tweet counts, suggesting that majority of them are real people.
@@ -96,11 +121,23 @@ Among the seven brands, Disney has the largest distribution of Twitter followers
 ```{r, fig.height=8, fig.width=22, echo=FALSE, message=FALSE}
 require(gridExtra)
 
-followers_plot <- ggplot(data = tweets, aes(x = brand, y = followers, fill = brand)) + geom_boxplot() + coord_cartesian(ylim = c(0, 3000)) + labs(x = "Brands", y = "Number of Twitter followers") + ggtitle("Number of Twitter followers by brand") + theme(legend.position="none", plot.title=element_text(size=20))
+followers_plot <- ggplot(data = tweets, aes(x = brand, y = followers, fill = brand)) + 
+  geom_boxplot() + coord_cartesian(ylim = c(0, 3000)) + 
+  labs(x = "Brands", y = "Number of Twitter followers") + 
+  ggtitle("Number of Twitter followers by brand") + 
+  theme(legend.position="none", plot.title=element_text(size=20))
 
-friends_plot <- ggplot(data = tweets, aes(x = brand, y = friends, fill = brand)) + geom_boxplot() + coord_cartesian(ylim = c(0, 2250)) + labs(x = "Brands", y = "Number of people followed") + ggtitle("Number of Twitter friends by brand") + theme(legend.position="none", plot.title=element_text(size=20))
+friends_plot <- ggplot(data = tweets, aes(x = brand, y = friends, fill = brand)) + 
+  geom_boxplot() + coord_cartesian(ylim = c(0, 2250)) + 
+  labs(x = "Brands", y = "Number of people followed") + 
+  ggtitle("Number of Twitter friends by brand") + 
+  theme(legend.position="none", plot.title=element_text(size=20))
 
-status_plot <- ggplot(data = tweets, aes(x = brand, y = statuses, fill = brand)) + geom_boxplot() + coord_cartesian(ylim = c(0, 200000)) + labs(x = "Brands", y = "Total user tweet counts") + ggtitle("Users' total tweet counts by brand") + theme(legend.position="none", plot.title=element_text(size=20))
+status_plot <- ggplot(data = tweets, aes(x = brand, y = statuses, fill = brand)) + 
+  geom_boxplot() + coord_cartesian(ylim = c(0, 200000)) + 
+  labs(x = "Brands", y = "Total user tweet counts") + 
+  ggtitle("Users' total tweet counts by brand") + 
+  theme(legend.position="none", plot.title=element_text(size=20))
 
 grid.arrange(followers_plot, friends_plot, status_plot, ncol=3)
 ```
@@ -108,11 +145,20 @@ grid.arrange(followers_plot, friends_plot, status_plot, ncol=3)
 Comparison of the users reveal that even the outliers have significantly higher number of followers than number of friends. A large number of users have more than 500000 total tweet counts and tend to tweet about the electronic brands, but they have few Twitter followers or friends. By contrast, users that boast high number of followers (1.5 millions or greater) or high number of friends (125000 or greater) are diverse in the brands that they tweeted, and generally have fewer than 500000 total tweet counts.
 
 ```{r, fig.height=6, fig.width=12, echo=FALSE}
-ggplot(data = tweets, aes(x = friends, y = followers, colour = brand)) + geom_point(size = 2, alpha = 0.7) + labs(x = "Number of friends", y = "Number of followers", colour=guide_legend(title = "Brands")) + ggtitle("Twitter users' number of followers vs number of friends")
+ggplot(data = tweets, aes(x = friends, y = followers, colour = brand)) + 
+  geom_point(size = 2, alpha = 0.7) + 
+  labs(x = "Number of friends", y = "Number of followers", colour=guide_legend(title = "Brands")) + 
+  ggtitle("Twitter users' number of followers vs number of friends")
 
-ggplot(data = tweets, aes(x = followers, y = statuses, colour = brand)) + geom_point(size = 2, alpha = 0.7) + labs(x = "Number of followers", y = "Total tweet counts", colour=guide_legend(title="Brands")) + ggtitle("Twitter users' total tweet counts vs number of followers")
+ggplot(data = tweets, aes(x = followers, y = statuses, colour = brand)) + 
+  geom_point(size = 2, alpha = 0.7) + 
+  labs(x = "Number of followers", y = "Total tweet counts", colour=guide_legend(title="Brands")) + 
+  ggtitle("Twitter users' total tweet counts vs number of followers")
 
-ggplot(data = tweets, aes(x = friends, y = statuses, colour = brand)) + geom_point(size = 2, alpha = 0.7) + labs(x = "Number of friends", y = "Total tweet counts", colour=guide_legend(title="Brands")) + ggtitle("Twitter users' total tweet counts vs number of friends")
+ggplot(data = tweets, aes(x = friends, y = statuses, colour = brand)) + 
+  geom_point(size = 2, alpha = 0.7) + 
+  labs(x = "Number of friends", y = "Total tweet counts", colour=guide_legend(title="Brands")) + 
+  ggtitle("Twitter users' total tweet counts vs number of friends")
 ```
 
 User and tweet that has the highest number of followers:
