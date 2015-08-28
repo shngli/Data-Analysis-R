@@ -1,6 +1,5 @@
 R-language
 ==========
-To be updated
 
 References
 ------------
