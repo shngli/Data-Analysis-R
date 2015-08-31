@@ -1,0 +1,562 @@
+---
+title: "San Francisco Crime Visualization"
+author: "Chisheng Li"
+output: html_document
+---
+
+### Introduction
+This project examines the San Francisco Police Department crime records between January 1st 2009 and July 2015. It visualizes the trends of major crimes and drugs in the city across time and locations.
+
+### Methodology
+There were 940,668 observations in the original dataset. Duplicates that shared the same incident numbers were removed, leaving 724,426 observations in the data frame. Some of the infrequent crimes among the 39 crime categories were consolidated together, such as forgeries and bad checks, and there are only 26 crime categories in the resulting data frame. 21,910 drug-related crimes were subsetted into a new data frame, and a column for drug type was created to label the drug that was associated with each crime observation.
+
+### Exploratory Analysis of Crime Trends
+
+```{r, echo=FALSE, message=FALSE}
+library(ggplot2)
+library(plyr)
+library(gridExtra)
+library(RColorBrewer)
+
+# Load the dataset
+load("crime.Rda")
+load("rawCrime.Rda")
+load("map.Rda")
+load("drugs.Rda")
+load("rawDrugs.Rda")
+```
+
+Larceny and theft was the most common crime in San Francisco between January 1st 2009 and July 31st 2015, with a total of 193,497 reported incidents. The next two highest crime categories, "Other offenses" (98,281 reported incidents) and "Non-criminal" (98,172 reported incidents), are omitted from discussion in the subsequent analyses. Instead, the key focus is on the following high crime categories: larceny and theft, assault (54,793 reported incidents), vandalism (42,598 reported incidents), vehicle theft (35,125 reported incidents), burglary (31,483 reported incidents), drugs (21,910 reported incidents) and robbery (19,226 reported incidents).
+
+```{r, fig.height=8, fig.width=12, echo=FALSE, message=FALSE}
+# Plot a histogram showing the frequency of each crime category
+crimeCount <- cbind(aggregate(crime[, "IncidntNum"], by = list(crime$Category), sum))
+colnames(crimeCount) <- c("Category", "Frequency")
+
+h <- ggplot(crimeCount, aes(reorder(Category, Frequency), Frequency))
+h + geom_bar(stat="identity") + 
+  ggtitle("Frequency of crime in the SF Bay area (Jan 01 2009 - July 31 2015)") + 
+  ylab("Number of reports") + xlab("Crime category") + 
+  theme(axis.text.x = element_text(angle=90, hjust=1)) + 
+  geom_text(aes(label=round(Frequency), size = 2, hjust = 0.5, vjust = -1))
+
+```
+
+### What days and times are especially dangerous?
+
+```{r, echo=FALSE, message=FALSE}
+# Subset only high crime frequencies
+crimeHigh <- subset(crime, Category == "LARCENY/THEFT" | Category == "ASSAULT" | 
+  Category == "VANDALISM" | Category == "VEHICLE THEFT" | Category == "BURGLARY" | 
+  Category == "DRUG/NARCOTIC" | Category == "ROBBERY")
+crimeHigh <- droplevels(crimeHigh)
+
+# Sort the crime categories in decreasing order
+crimeHigh <- within(crimeHigh, Category <- factor(Category, levels = names(sort(table(Category), decreasing = T))))
+crimePd <- within(crime, PdDistrict <- factor(PdDistrict, levels = names(sort(table(PdDistrict), decreasing = T))))
+```
+
+Crime distribution is fairly even throughout the week. Majority of the crimes occurred on Friday (112,351 reported incidents), followed by Saturday (107,510 reported incidents) and Wednesday (104,773 reported incidents). Interestingly, the least amount of incidents were reported on Monday (98,825 reported incidents) and Sunday (97,769 incidents). In the Southern, Northern, Central and Mission districts, the number of crimes increased sharply on Friday and Saturday, then declined for rest of the week. Tenderloin is the only district where the crime occurrences steadily increased from Tuesday to Saturday.
+
+Among the high crime categories, larceny and theft tend to occur on Friday and Saturday. On the other hand, the occurrences of assault steadily increased from Thursday to Sunday, while burglary generally occurred more often during the weekdays than the weekends. Drug crimes were most commonly reported on Wednesday and least reported during the weekends, and robberies happened by approximately the same frequency every day.
+
+```{r, fig.height=13, fig.width=13, echo=FALSE, message=FALSE}
+# What are the crime patterns by categories and disricts according to DayOfWeek
+catDow <- ggplot(data = crimeHigh, aes(x = DayOfWeek, fill = Category)) + 
+  geom_bar(width = 0.9) + ggtitle("Crime Frequency by the Day of Week") + 
+  labs(x = "Day of Week", y = "Number of reports", fill = guide_legend(title = "Crime category"))
+
+pdDow <- ggplot(data = crimePd, aes(x = DayOfWeek, fill = PdDistrict)) + 
+  geom_bar(width = 0.9) + 
+  labs(x = "Day of Week", y = "Number of reports", fill = guide_legend(title = "District"))
+
+grid.arrange(pdDow, catDow, nrow=2)
+```
+
+Generally, most of the crimes happened during the evening and the night. The crimes least frequently occurred in the early morning, especially between 5am and 6am when there were only 6,914 reported incidents. The crime occurrences then increased steadily  through the day as they peaked at noon time (43,286 reported incidents) and in the evening between 6pm and 7pm (46,892 reported incidents). The crime frequency then decreased across night time and sharply declined between 12am and 1am.
+
+```{r, fig.height=7.5, fig.width=15, echo=FALSE, message=FALSE}
+# What are the crime patterns by categories and disricts according to Time
+ggplot(data = crimePd, aes(x = Time, fill = PdDistrict)) + geom_bar(width = 0.9) + 
+  ggtitle("Crime Frequency by 24-hour interval") +
+  labs(x = "Time (24-hour interval)", y = "Number of reports", fill = guide_legend(title = "District"))
+```
+
+Larceny and drug crimes exhibit similar sinusoid time-interval patterns as they peaked around 5pm and declined after 6pm. Assault crimes occurred at similar frequency between 12pm and 1am before they decreased sharply in the early morning. Vandalism and vehicle thefts occurred primarily between 7pm and 12am, while burglaries were more common between 8am and 7pm. Robbery is the only category that displays a V-shape pattern as the crime frequency increased through the day and peaked at 10pm, then fell after 2am.
+
+```{r, echo=FALSE, message=FALSE}
+# To prepare for smoonth_geom plots
+# Larceny
+larc <- subset(crime, crime$Category == "LARCENY/THEFT")
+larc <- droplevels(larc)
+larcTime <- ddply(larc, c('Category', 'Time'), summarise, totalCat = sum(IncidntNum, na.rm=T))
+
+# Assault
+asst <- subset(crime, crime$Category == "ASSAULT")
+asst <- droplevels(asst)
+asstTime <- ddply(asst, c('Category', 'Time'), summarise, totalCat = sum(IncidntNum, na.rm=T))
+
+# Vandalism
+vand <- subset(crime, crime$Category == "VANDALISM")
+vand <- droplevels(vand)
+vandTime <- ddply(vand, c('Category', 'Time'), summarise, totalCat = sum(IncidntNum, na.rm=T))
+
+# VEHICLE THEFT
+vehc <- subset(crime, crime$Category == "VEHICLE THEFT")
+vehc <- droplevels(vehc)
+vehcTime <- ddply(vehc, c('Category', 'Time'), summarise, totalCat = sum(IncidntNum, na.rm=T))
+
+# BURGLARY
+burg <- subset(crime, crime$Category == "BURGLARY")
+burg <- droplevels(burg)
+burgTime <- ddply(burg, c('Category', 'Time'), summarise, totalCat = sum(IncidntNum, na.rm=T))
+
+# DRUG/NARCOTIC
+narc <- subset(crime, crime$Category == "DRUG/NARCOTIC")
+narc <- droplevels(narc)
+narcTime <- ddply(narc, c('Category', 'Time'), summarise, totalCat = sum(IncidntNum, na.rm=T))
+
+# ROBBERY
+robb <- subset(crime, crime$Category == "ROBBERY")
+robb <- droplevels(robb)
+robbTime <- ddply(robb, c('Category', 'Time'), summarise, totalCat = sum(IncidntNum, na.rm=T))
+```
+
+```{r, fig.height=15, fig.width=15, echo=FALSE, message=FALSE}
+larcPlot <- ggplot(larcTime, aes(x=Time, y=totalCat, group=1)) + geom_point(colour="red", size=2) + 
+  geom_smooth(method="loess") + labs(x = "Time (24-hour interval)", y = "Number of reports") +
+  ggtitle("Larceny/Theft vs Time")
+
+asstPlot <- ggplot(asstTime, aes(x=Time, y=totalCat, group=1)) + geom_point(colour="blue", size=2) + 
+  geom_smooth(method="loess") + labs(x = "Time (24-hour interval)", y = "Number of reports") +
+  ggtitle("Assault vs Time")
+
+vandPlot <- ggplot(vandTime, aes(x=Time, y=totalCat, group=1)) + geom_point(colour="darkgreen", size=2) + 
+  geom_smooth(method="loess") + labs(x = "Time (24-hour interval)", y = "Number of reports") + 
+  ggtitle("Vandalism vs Time")
+
+vehcPlot <- ggplot(vehcTime, aes(x=Time, y=totalCat, group=1)) + geom_point(colour="purple", size=2) + 
+  geom_smooth(method="loess") + labs(x = "Time (24-hour interval)", y = "Number of reports") +
+  ggtitle("Vehicle Theft vs Time")
+
+burgPlot <- ggplot(burgTime, aes(x=Time, y=totalCat, group=1)) + geom_point(colour="orange", size=2) + 
+  geom_smooth(method="loess") + labs(x = "Time (24-hour interval)", y = "Number of reports") + 
+  ggtitle("Burglary vs Time")
+
+narcPlot <- ggplot(narcTime, aes(x=Time, y=totalCat, group=1)) + geom_point(colour="black", size=2) + 
+  geom_smooth(method="loess") + labs(x = "Time (24-hour interval)", y = "Number of reports") + 
+  ggtitle("Drug/Narcotic vs Time")
+
+robbPlot <- ggplot(robbTime, aes(x=Time, y=totalCat, group=1)) + geom_point(colour="brown", size=2) + 
+  geom_smooth(method="loess") + labs(x = "Time (24-hour interval)", y = "Number of reports") + 
+  ggtitle("Robbery vs Time")
+
+grid.arrange(larcPlot, asstPlot, vandPlot, vehcPlot, burgPlot, narcPlot, robbPlot, nrow=3, ncol=3)
+```
+
+Across the months and years, the number of crimes declined for approximately 2 years from 2009 to 2011, but increased again since 2011. The Southern, Northern and Central districts all experienced significant increase in crime incidents from 2011 to 2014, whereas crime occurrences in the Mission district peaked in 2013 and subsequently declined. Tenderloin is the sole exception where the number of crime incidents generally fell from 2009 to 2014.
+
+Among the high crime categories, larceny and theft crimes exhibit the most prominent increase in occurrences (by approximately 5,000 incidents per year) after 2011. Assault, vandalism and robbery maintained similar crime frequency every year without any notable increase or decrease, whereas drug is the sole crime category that was steadily reduced by half since 2009.
+
+```{r, fig.height=16, fig.width=16, echo=FALSE, message=FALSE}
+# What are the crime patterns by categories and disricts according to Month and Year
+catMY <- ggplot(data = crimeHigh, aes(x = monthYear, fill = Category)) + 
+  geom_bar(width = 0.9) + ggtitle("Crime Frequency by Month and Year") + 
+  theme(axis.text.x = element_text(angle=90, hjust=1)) + 
+  labs(x = "Month-Year", y = "Number of reports", fill = guide_legend(title = "Crime category"))
+
+pdMY <- ggplot(data = crimePd, aes(x = monthYear, fill = PdDistrict)) + 
+  geom_bar(width = 0.9) + theme(axis.text.x = element_text(angle=90, hjust=1)) + 
+  labs(x = "Month-Year", y = "Number of reports", fill = guide_legend(title = "District"))
+
+grid.arrange(pdMY, catMY, nrow=2)
+```
+
+### What are the dangerous locations in SF?
+
+The Southern district was the most dangerous San Francisco district, reporting 139,911 crime incidents since January 2009. Mission and Northern districts were also high crime locations, reporting 92,610 incidents and 86,673 incidents respectively. Park and Richmond districts were the safest locations, with only 43,180 and 39,581 reported crime incidents since 2009.
+
+```{r, fig.height=6, fig.width=10, echo=FALSE, message=FALSE}
+# Histogram of District
+ggplot(data = crime, aes(x = PdDistrict)) + geom_bar(width = 0.9) + 
+  ggtitle("Frequency of crime by District") + labs(x = "District", y = "Crime frequency")
+```
+
+Larceny and vehicle thefts were common crimes across every district, but they occurred less frequently in the Tenderloin district. 
+
+```{r, fig.height=8, fig.width=14, echo=FALSE, message=FALSE}
+# Heatmap of District/Category
+pdCatheat <- ddply(rawCrime, c("PdDistrict", "Category"), summarise, 
+                   totalCrime = sum(IncidntNum, na.rm=T))
+
+brks <- c(1,10^rep(1:6))
+pdCatheat$bin <- cut(pdCatheat$totalCrime, breaks=brks, labels=1:6, include.lowest=T)
+ggplot(pdCatheat, aes(y = Category, x = PdDistrict)) + geom_tile(aes(fill=bin)) + 
+  scale_fill_manual(name="Crime Incidents", labels=brks, values=rev(brewer.pal(6,"Spectral"))) + 
+  xlab("") + ylab("")
+```
+
+The 800 Block of Bryant Street at South of Market (SOMA) was the most dangerous address in San Francisco, with 24,269 crime incidents reported at the area since January 2009. An average of 20.6 crime incidents were reported at each address, and the median number of reported incidents at each address is 7.
+
+```{r, echo=FALSE, message=FALSE}
+# Prepare crime per address 
+crimePerAdd <- ddply(rawCrime, c("Address", "Longitude", "Latitude"), summarise, 
+                     totalCrime = sum(IncidntNum, na.rm=T))
+
+# Average number of crime per Address
+mean(crimePerAdd$totalCrime)
+# Median number of crime per location
+median(crimePerAdd$totalCrime)
+
+# Address with the most number of crime ie. most dangerous
+crimePerAdd[which.max(crimePerAdd$totalCrime),]
+```
+
+The map indicates that most of the locations that reported at least 150 crime incidents were clustered around downtown San Francisco, such as the 1000 Block of Market Street and the 100 Block of Powell Street. In some cases, however, the locations were far from downtown, such as the 100 Block of Persia Avenue and the 5200 Block of Diamond Heights Blvd. 
+
+```{r, fig.height=10, fig.width=10, echo=FALSE, message=FALSE}
+# Subset locations/address where the total crime > 150
+highLoc <- subset(crimePerAdd, crimePerAdd$totalCrime > 150)
+
+# Plot high crime locations
+map + geom_point(aes(x = Longitude, y = Latitude), data = highLoc, color="red", size = 1.5)
+```
+
+### Are certain non-drug crimes more common in certain areas?
+
+Since 2009, larcenies increased frequently in the Central, Northern, Park, Richmond, Southern and Tenderloin districts. Assault crimes had a notable share of incidents in the Bayview, Mission and Tenderloin districts, whereas vandalism was common in the Bayview, Park and Taraval districts. Vehicle thefts were prominent primarily in the Bayview and Ingleside districts.
+
+```{r, echo=FALSE, message=FALSE}
+# Focus on LARCENY/THEFT, ASSAULT, VANDALISM, VEHICLE THEFT, BURGLARY, ROBBERY
+# Subset the six crime categories to the district, then plot the histogram
+hiCrime <- subset(crime, Category == "LARCENY/THEFT" | Category == "ASSAULT" | 
+  Category == "VANDALISM" | Category == "VEHICLE THEFT" | Category == "BURGLARY" | 
+  Category == "ROBBERY")
+hiCrime <- droplevels(hiCrime)
+# Sort the crime categories in decreasing order
+hiCrime <- within(hiCrime, Category <- factor(Category, levels = names(sort(table(Category), decreasing = T))))
+```
+
+```{r, fig.height=7, fig.width=14, echo=FALSE, message=FALSE}
+# BAYVIEW
+bayv <- subset(hiCrime, hiCrime$PdDistrict == "BAYVIEW")
+ggplot(data = bayv, aes(x = monthYear, fill = Category)) + 
+  geom_bar(width = 0.9) + ggtitle("Crime Frequency by Month and Year in the Bayview District") + 
+  theme(axis.text.x = element_text(angle=90, hjust=1)) + 
+  labs(x = "Month-Year", y = "Number of reports", fill = guide_legend(title = "Crime category"))
+
+# CENTRAL
+cent <- subset(hiCrime, hiCrime$PdDistrict == "CENTRAL")
+ggplot(data = cent, aes(x = monthYear, fill = Category)) + 
+  geom_bar(width = 0.9) + ggtitle("Crime Frequency by Month and Year in the Central District") + 
+  theme(axis.text.x = element_text(angle=90, hjust=1)) + 
+  labs(x = "Month-Year", y = "Number of reports", fill = guide_legend(title = "Crime category"))
+
+# INGLESIDE    
+ingl <- subset(hiCrime, hiCrime$PdDistrict == "INGLESIDE")
+ggplot(data = ingl, aes(x = monthYear, fill = Category)) + 
+  geom_bar(width = 0.9) + ggtitle("Crime Frequency by Month and Year in the Ingleside District") + 
+  theme(axis.text.x = element_text(angle=90, hjust=1)) + 
+  labs(x = "Month-Year", y = "Number of reports", fill = guide_legend(title = "Crime category"))
+
+# MISSION   
+misn <- subset(hiCrime, hiCrime$PdDistrict == "MISSION")
+ggplot(data = misn, aes(x = monthYear, fill = Category)) + 
+  geom_bar(width = 0.9) + ggtitle("Crime Frequency by Month and Year in the Mission District") + 
+  theme(axis.text.x = element_text(angle=90, hjust=1)) + 
+  labs(x = "Month-Year", y = "Number of reports", fill = guide_legend(title = "Crime category"))
+
+# NORTHERN     
+nort <- subset(hiCrime, hiCrime$PdDistrict == "NORTHERN")
+ggplot(data = nort, aes(x = monthYear, fill = Category)) + 
+  geom_bar(width = 0.9) + ggtitle("Crime Frequency by Month and Year in the Northern District") + 
+  theme(axis.text.x = element_text(angle=90, hjust=1)) + 
+  labs(x = "Month-Year", y = "Number of reports", fill = guide_legend(title = "Crime category"))
+
+# PARK   
+park <- subset(hiCrime, hiCrime$PdDistrict == "PARK")
+ggplot(data = park, aes(x = monthYear, fill = Category)) + 
+  geom_bar(width = 0.9) + ggtitle("Crime Frequency by Month and Year in the Park District") + 
+  theme(axis.text.x = element_text(angle=90, hjust=1)) + 
+  labs(x = "Month-Year", y = "Number of reports", fill = guide_legend(title = "Crime category"))
+
+# RICHMOND   
+rich <- subset(hiCrime, hiCrime$PdDistrict == "RICHMOND")
+ggplot(data = rich, aes(x = monthYear, fill = Category)) + 
+  geom_bar(width = 0.9) + ggtitle("Crime Frequency by Month and Year in the Richmond District") + 
+  theme(axis.text.x = element_text(angle=90, hjust=1)) + 
+  labs(x = "Month-Year", y = "Number of reports", fill = guide_legend(title = "Crime category"))
+
+# SOUTHERN    
+sout <- subset(hiCrime, hiCrime$PdDistrict == "SOUTHERN")
+ggplot(data = sout, aes(x = monthYear, fill = Category)) + 
+  geom_bar(width = 0.9) + ggtitle("Crime Frequency by Month and Year in the Southern District") + 
+  theme(axis.text.x = element_text(angle=90, hjust=1)) + 
+  labs(x = "Month-Year", y = "Number of reports", fill = guide_legend(title = "Crime category"))
+
+# TARAVAL 
+tara <- subset(hiCrime, hiCrime$PdDistrict == "TARAVAL")
+ggplot(data = tara, aes(x = monthYear, fill = Category)) + 
+  geom_bar(width = 0.9) + ggtitle("Crime Frequency by Month and Year in the Taraval District") + 
+  theme(axis.text.x = element_text(angle=90, hjust=1)) + 
+  labs(x = "Month-Year", y = "Number of reports", fill = guide_legend(title = "Crime category"))
+
+# TENDERLOIN 
+tend <- subset(hiCrime, hiCrime$PdDistrict == "TENDERLOIN")
+ggplot(data = tend, aes(x = monthYear, fill = Category)) + 
+  geom_bar(width = 0.9) + ggtitle("Crime Frequency by Month and Year in the Tenderloin District") + 
+  theme(axis.text.x = element_text(angle=90, hjust=1)) + 
+  labs(x = "Month-Year", y = "Number of reports", fill = guide_legend(title = "Crime category"))
+```
+
+The 800 Block of Bryant Street is the most common address for larceny, assault, vandalism and robbery incidents. Vehicle thefts happened most frequently at the 400 Block of Stockton Street, while burglaries were most highly reported at the 800 Block of Market Street.
+
+```{r, echo=FALSE, message=FALSE}
+# Prepare ggmap plot for the 6 crime categeries
+
+## LARCENY/THEFT
+larTheft <- subset(rawCrime, rawCrime$Category == "LARCENY/THEFT")
+larTheft <- droplevels(larTheft)
+# Summation of the number theft crime at each location
+theftLoc <- ddply(larTheft, c('Category', 'Descript', 'Address', 'PdDistrict', 
+                              'Longitude', 'Latitude', 'Location'), 
+                  summarise, totalTheft = sum(IncidntNum, na.rm=T))
+
+# The location that has the highest number of larceny occurred: 3419 total thefts
+theftLoc[which.max(theftLoc$totalTheft),]$Address
+# Subset locations/address where the total larceny > 35
+highLar <- subset(theftLoc, theftLoc$totalTheft > 35)
+
+## ASSAULT
+asslt <- subset(rawCrime, rawCrime$Category == "ASSAULT")
+asslt <- droplevels(asslt)
+# Summation of the number assault crime at each location
+asstLoc <- ddply(asslt, c('Category', 'Descript', 'Address', 'PdDistrict', 
+                          'Longitude', 'Latitude', 'Location'), 
+                 summarise, totalAsst = sum(IncidntNum, na.rm=T))
+
+# The location that has the highest number of assault occurred: 
+asstLoc[which.max(asstLoc$totalAsst),]$Address
+# Subset locations/address where the total assault > 15
+highAst <- subset(asstLoc, asstLoc$totalAsst > 15)
+
+## VANDALISM
+vandl <- subset(rawCrime, rawCrime$Category == "VANDALISM")
+vandl <- droplevels(vandl)
+# Summation of the number vandalism crime at each location
+vandLoc <- ddply(vandl, c('Category', 'Descript', 'Address', 'PdDistrict', 
+                          'Longitude', 'Latitude', 'Location'), 
+                 summarise, totalVand = sum(IncidntNum, na.rm=T))
+
+# The location that has the highest number of vandalism occurred: 
+vandLoc[which.max(vandLoc$totalVand),]$Address
+# Subset locations/address where the total vandalism > 15
+highVnd <- subset(vandLoc, vandLoc$totalVand > 15)
+
+## VEHICLE THEFT
+carTheft <- subset(rawCrime, rawCrime$Category == "VEHICLE THEFT")
+carTheft <- droplevels(carTheft)
+# Summation of the number vehicle theft crime at each location
+carLoc <- ddply(carTheft, c('Category', 'Descript', 'Address', 'PdDistrict', 
+                            'Longitude', 'Latitude', 'Location'), 
+                summarise, totalTheft = sum(IncidntNum, na.rm=T))
+
+# The location that has the highest number of vehicle theft occurred: 
+carLoc[which.max(carLoc$totalTheft),]$Address
+# Subset locations/address where the total vehicle theft > 15
+highCar <- subset(carLoc, carLoc$totalTheft > 15)
+
+## BURGLARY
+burgl <- subset(rawCrime, rawCrime$Category == "BURGLARY")
+burgl <- droplevels(burgl)
+# Summation of the number burglary crime at each location
+burgLoc <- ddply(burgl, c('Category', 'Descript', 'Address', 'PdDistrict', 
+                          'Longitude', 'Latitude', 'Location'), 
+                 summarise, totalCrime = sum(IncidntNum, na.rm=T))
+
+# The location that has the highest number of burglary occurred:
+burgLoc[which.max(burgLoc$totalCrime),]$Address
+# Subset locations/address where the total burglary > 15
+highBur <- subset(burgLoc, burgLoc$totalCrime > 15)
+
+## ROBBERY
+robb <- subset(rawCrime, rawCrime$Category == "ROBBERY")
+robb <- droplevels(robb)
+# Summation of the number robbery crime at each location
+robLoc <- ddply(robb, c('Category', 'Descript', 'Address', 'PdDistrict', 
+                        'Longitude', 'Latitude', 'Location'), 
+                summarise, totalCrime = sum(IncidntNum, na.rm=T))
+
+# The location that has the highest number of robbery occurred: 
+robLoc[which.max(robLoc$totalCrime),]$Address
+# Subset locations/address where the total robbery > 15
+highRob <- subset(robLoc, robLoc$totalCrime > 15)
+```
+
+The following map displays the locations of the frequent occurrences for larcenies (red dots), assaults (blue dots), vandalism (green dots), vehicle thefts (cyan dots), burglaries (black dots) and robberies (purple dots). Larcenies and assaults were spreaded in various locations across San Francisco city, whereas robberies were concentrated along Market Street.
+
+```{r, fig.height=10, fig.width=10, echo=FALSE, message=FALSE}
+# plot all 6 crimes
+map1 <- map + geom_point(aes(x = Longitude, y = Latitude), data = highLar, color="red", size = 1.7)
+map1 <- map1 + geom_point(aes(x = Longitude, y = Latitude), data = highAst, color="blue", size = 1.7)
+map1 <- map1 + geom_point(aes(x = Longitude, y = Latitude), data = highVnd, color="green", size = 1.7)
+map1 <- map1 + geom_point(aes(x = Longitude, y = Latitude), data = highCar, color="cyan", size = 1.7)
+map1 <- map1 + geom_point(aes(x = Longitude, y = Latitude), data = highBur, color="black", size = 1.7)
+map1 <- map1 + geom_point(aes(x = Longitude, y = Latitude), data = highRob, color="purple", size = 1.7)
+
+map1
+```
+
+### Are certain drugs more common in certain areas? 
+
+The Bayview, Central, Ingleside, Mission, Southern, Taraval and Tenderloin districts all show consistent decline in drug incidents from 2009 to 2015, in particular reported cocaine incidents. Cocaine-related crimes were prominent in the Bayview, Mission, Northern and Tenderloin districts. On the other hand, marijuana-related crimes mainly happened in the Bayview, Ingleside, Park, Richmond, Southern and Taraval districts. Meth-related crimes happened frequently in the Bayview, Central, Ingleside, Northern, Richmond and Southern districts. Heroin-related crimes were uncommon except for the Central and the Tenderloin districts.
+
+```{r, echo=FALSE, message=FALSE}
+# Subset the drug types to the district, then plot the histogram
+drugAnly <- subset(drugs, Type == "Cocaine" | Type == "Marijuana" | 
+  Type == "Meth" | Type == "Heroin" | Type == "Opium" | 
+  Type == "Hallucinogenic" | Type == "Methadone" | Type == "Barbituates")
+```
+
+```{r, fig.height=7, fig.width=14, echo=FALSE, message=FALSE}
+# BAYVIEW
+bayvDrug <- subset(drugAnly, drugAnly$PdDistrict == "BAYVIEW")
+ggplot(data = bayvDrug, aes(x = monthYear, fill = Type)) + 
+  geom_bar(width = 0.9) + ggtitle("Drug Crimes by Month and Year in the Bayview District") + 
+  theme(axis.text.x = element_text(angle=90, hjust=1)) + 
+  labs(x = "Month-Year", y = "Number of reports", fill = guide_legend(title = "Drug category"))
+
+# CENTRAL
+centDrug <- subset(drugAnly, drugAnly$PdDistrict == "CENTRAL")
+ggplot(data = centDrug, aes(x = monthYear, fill = Type)) + 
+  geom_bar(width = 0.9) + ggtitle("Drug Crimes by Month and Year in the Central District") + 
+  theme(axis.text.x = element_text(angle=90, hjust=1)) + 
+  labs(x = "Month-Year", y = "Number of reports", fill = guide_legend(title = "Drug category"))
+
+# INGLESIDE    
+inglDrug <- subset(drugAnly, drugAnly$PdDistrict == "INGLESIDE")
+ggplot(data = inglDrug, aes(x = monthYear, fill = Type)) + 
+  geom_bar(width = 0.9) + ggtitle("Drug Crimes by Month and Year in the Ingleside District") + 
+  theme(axis.text.x = element_text(angle=90, hjust=1)) + 
+  labs(x = "Month-Year", y = "Number of reports", fill = guide_legend(title = "Drug category"))
+
+# MISSION   
+misnDrug <- subset(drugAnly, drugAnly$PdDistrict == "MISSION")
+ggplot(data = misnDrug, aes(x = monthYear, fill = Type)) + 
+  geom_bar(width = 0.9) + ggtitle("Drug Crimes by Month and Year in the Mission District") + 
+  theme(axis.text.x = element_text(angle=90, hjust=1)) + 
+  labs(x = "Month-Year", y = "Number of reports", fill = guide_legend(title = "Drug category"))
+
+# NORTHERN     
+nortDrug <- subset(drugAnly, drugAnly$PdDistrict == "NORTHERN")
+ggplot(data = nortDrug, aes(x = monthYear, fill = Type)) + 
+  geom_bar(width = 0.9) + ggtitle("Drug Crimes by Month and Year in the Northern District") + 
+  theme(axis.text.x = element_text(angle=90, hjust=1)) + 
+  labs(x = "Month-Year", y = "Number of reports", fill = guide_legend(title = "Drug category"))
+
+# PARK   
+parkDrug <- subset(drugAnly, drugAnly$PdDistrict == "PARK")
+ggplot(data = parkDrug, aes(x = monthYear, fill = Type)) + 
+  geom_bar(width = 0.9) + ggtitle("Drug Crimes by Month and Year in the Park District") + 
+  theme(axis.text.x = element_text(angle=90, hjust=1)) + 
+  labs(x = "Month-Year", y = "Number of reports", fill = guide_legend(title = "Drug category"))
+
+# RICHMOND   
+richDrug <- subset(drugAnly, drugAnly$PdDistrict == "RICHMOND")
+ggplot(data = richDrug, aes(x = monthYear, fill = Type)) + 
+  geom_bar(width = 0.9) + ggtitle("Drug Crimes by Month and Year in the Richmond District") + 
+  theme(axis.text.x = element_text(angle=90, hjust=1)) + 
+  labs(x = "Month-Year", y = "Number of reports", fill = guide_legend(title = "Drug category"))
+
+# SOUTHERN    
+soutDrug <- subset(drugAnly, drugAnly$PdDistrict == "SOUTHERN")
+ggplot(data = soutDrug, aes(x = monthYear, fill = Type)) + 
+  geom_bar(width = 0.9) + ggtitle("Drug Crimes by Month and Year in the Southern District") + 
+  theme(axis.text.x = element_text(angle=90, hjust=1)) + 
+  labs(x = "Month-Year", y = "Number of reports", fill = guide_legend(title = "Drug category"))
+
+# TARAVAL 
+taraDrug <- subset(drugAnly, drugAnly$PdDistrict == "TARAVAL")
+ggplot(data = taraDrug, aes(x = monthYear, fill = Type)) + 
+  geom_bar(width = 0.9) + ggtitle("Drug Crimes by Month and Year in the Taraval District") + 
+  theme(axis.text.x = element_text(angle=90, hjust=1)) + 
+  labs(x = "Month-Year", y = "Number of reports", fill = guide_legend(title = "Drug category"))
+
+# TENDERLOIN 
+tendDrug <- subset(drugAnly, drugAnly$PdDistrict == "TENDERLOIN")
+ggplot(data = tendDrug, aes(x = monthYear, fill = Type)) + 
+  geom_bar(width = 0.9) + ggtitle("Drug Crimes by Month and Year in the Tenderloin District") + 
+  theme(axis.text.x = element_text(angle=90, hjust=1)) + 
+  labs(x = "Month-Year", y = "Number of reports", fill = guide_legend(title = "Drug category"))
+```
+
+The four major drug crimes all differ in the locations where they were most frequently reported. Most cocaine-related crimes happened at the 2000 Block of Mission Street, while majority marijuana-related crimes occurred at the 300 Block of Laguna Honda Blvd. The meth-related crimes were primarily located at the 800 Block of Bryant Street, and the heroin-related crimes happened mainly at Turk Street and Leavenworth Street.
+
+```{r, echo=FALSE, message=FALSE}
+# Prepare the ggmap plot
+## Cocaine
+coke <- subset(rawDrugs, rawDrugs$Type == "Cocaine")
+coke <- droplevels(coke)
+# Summation of the number theft crime at each location
+cokeLoc <- ddply(coke, c('Category', 'Descript', 'Address', 'PdDistrict', 
+                         'Longitude', 'Latitude', 'Location'), 
+                 summarise, totalCrime = sum(IncidntNum, na.rm=T))
+
+# The location that has the highest number of cocaine crime: 
+cokeLoc[which.max(cokeLoc$totalCrime),]$Address
+# Subset locations/address where the total cocaine crime > 20
+highCoke <- subset(cokeLoc, cokeLoc$totalCrime > 1)
+
+## Marijuana
+weed <- subset(rawDrugs, rawDrugs$Type == "Marijuana")
+weed <- droplevels(weed)
+# Summation of the number theft crime at each location
+weedLoc <- ddply(weed, c('Category', 'Descript', 'Address', 'PdDistrict', 
+                         'Longitude', 'Latitude', 'Location'), 
+                 summarise, totalCrime = sum(IncidntNum, na.rm=T))
+
+# The location that has the highest number of marijuana crime: 
+weedLoc[which.max(weedLoc$totalCrime),]$Address
+# Subset locations/address where the total marijuana crime > 20
+highWeed <- subset(weedLoc, weedLoc$totalCrime > 1)
+
+## Meth
+meth <- subset(rawDrugs, rawDrugs$Type == "Meth")
+meth <- droplevels(meth)
+# Summation of the number theft crime at each location
+methLoc <- ddply(meth, c('Category', 'Descript', 'Address', 'PdDistrict', 
+                         'Longitude', 'Latitude', 'Location'), 
+                 summarise, totalCrime = sum(IncidntNum, na.rm=T))
+
+# The location that has the highest number of meth crime: 
+methLoc[which.max(methLoc$totalCrime),]$Address
+# Subset locations/address where the total meth crime > 20
+highMeth <- subset(methLoc, methLoc$totalCrime > 1)
+
+## Heroin
+hero <- subset(rawDrugs, rawDrugs$Type == "Heroin")
+hero <- droplevels(hero)
+# Summation of the number theft crime at each location
+heroLoc <- ddply(hero, c('Category', 'Descript', 'Address', 'PdDistrict', 
+                         'Longitude', 'Latitude', 'Location'), 
+                 summarise, totalCrime = sum(IncidntNum, na.rm=T))
+
+# The location that has the highest number of heroin crime:
+heroLoc[which.max(heroLoc$totalCrime),]$Address
+# Subset locations/address where the total heroin crime > 20
+highHero <- subset(heroLoc, heroLoc$totalCrime > 1)
+```
+
+The following map displays the frequent locations for cocaine (red dots), marijuana (blue dots), meth (green dots) and heroin (yellow dots). Marijuana had the largest spatial footprint, whereas meth and heroin were mainly concentrated around downtown San Francisco.
+
+```{r, fig.height=10, fig.width=10, echo=FALSE, message=FALSE}
+map2 <- map + geom_point(aes(x = Longitude, y = Latitude), alpha = 0.7, data = highCoke, color="red", size = 1.7)
+map2 <- map2 + geom_point(aes(x = Longitude, y = Latitude), alpha = 0.7, data = highWeed, color="blue", size = 1.7)
+map2 <- map2 + geom_point(aes(x = Longitude, y = Latitude), alpha = 0.7, data = highMeth, color="green", size = 1.7)
+map2 <- map2 + geom_point(aes(x = Longitude, y = Latitude), alpha = 0.7, data = highHero, color="yellow", size = 1.7)
+
+map2
+```
+
+### Resource:
+The San Francisco Police Department crime data set is available [here](https://data.sfgov.org/Public-Safety/SFPD-Incidents-from-1-January-2003/tmnf-yvry).
